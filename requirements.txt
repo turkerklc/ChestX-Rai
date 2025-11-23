@@ -1,0 +1,23 @@
+# FastAPI ve server
+fastapi>=0.104.0
+uvicorn>=0.23.0
+
+# PyTorch ve torchvision (M2 uyumlu güncel sürümü çekecektir)
+torch>=2.2.0
+torchvision>=0.17.0
+
+# Veri işleme
+# Python 3.12 icin Numpy min 1.26 olmak zorunda
+numpy>=1.26.0
+pandas>=2.1.0
+scikit-learn>=1.3.0
+pillow>=10.0.0
+
+# Görselleştirme / test için
+matplotlib>=3.8.0
+tqdm>=4.66.0
+
+# Opsiyonel
+# Sürüm numarası silindi, en güncel kararlı sürümü alacak
+opencv-python
+tensorboard>=2.16.0

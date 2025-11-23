@@ -205,3 +205,31 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# --- Kisisel Eklemeler ---
+
+# MacOS gereksiz dosyalari
+.DS_Store
+**/.DS_Store
+
+# VS Code kisisel ayarlari (Dosyandaki yorum satirini da acabilirsin ama garanti olsun)
+.vscode/
+
+# Dataset ve Modeller (GitHub'a sigmaz ve gizlilik riski tasir)
+data/
+datasets/
+images/
+raw_data/
+processed_data/
+*.dcm
+*.nii
+*.nii.gz
+*.csv
+*.xlsx
+
+# Egitilen buyuk model dosyalari (Agirliklar)
+*.pt
+*.pth
+*.h5
+models/
+checkpoints/
