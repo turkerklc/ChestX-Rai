@@ -1,107 +1,46 @@
-# ChestAI: Explainable Chest X-Ray Analysis
+# ChestAI - Web Interface 
 
-![Status](https://img.shields.io/badge/Status-Development-blue) ![Python](https://img.shields.io/badge/Python-3.12-yellow) ![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-red) ![License](https://img.shields.io/badge/License-MIT-green)
+Bu klasör, ChestAI projesinin kullanıcı arayüzünü (Frontend) içerir. **React**, **Vite** ve **Tailwind CSS** kullanılarak geliştirilmiştir.
 
-**ChestAI**, akciğer röntgenlerinden 14 farklı toraks hastalığını tespit eden ve Grad-CAM tekniği kullanarak modelin odaklandığı bölgeleri görselleştiren (xAI) bir derin öğrenme projesidir.
+## Tech Stack
 
-## Proje Özellikleri
+* **Framework:** React 18
+* **Build Tool:** Vite
+* **Stil:** Tailwind CSS
+* **HTTP İstekleri:** Axios
+* **İkonlar:** React Icons
 
-* **Derin Öğrenme Mimarisi:** NIH Chest X-Ray veri seti üzerinde eğitilmiş, özelleştirilmiş ResNet-50 modeli.
-* **Açıklanabilir Yapay Zeka (xAI):** Modelin karar mekanizmasını şeffaflaştıran Grad-CAM ısı haritası görselleştirmesi.
-* **Web Arayüzü:** React ve Tailwind CSS ile geliştirilmiş modern kullanıcı arayüzü.
-* **Çapraz Platform:** macOS (Apple Silicon) ve Windows (NVIDIA CUDA) üzerinde çalışabilen hibrit backend yapısı.
+## Kurulum ve Çalıştırma
 
-## Proje Yapısı
+Bu arayüzü geliştirmek veya çalıştırmak için bilgisayarınızda **Node.js** yüklü olmalıdır.
 
-```text
-xAI-chest/
-├── App/                    # Backend Kaynak Kodları (FastAPI & PyTorch)
-│   ├── api.py              # API Sunucusu
-│   ├── train.py            # Model Eğitim Scripti
-│   ├── predict.py          # Tekli Tahmin Scripti
-│   ├── explain.py          # Grad-CAM Görselleştirme Modülü
-│   └── model/              # Model Mimarisi ve Veri İşleme
-│       ├── model.py        # ResNet-50 Sınıfı
-│       └── dataset.py      # Veri Yükleyici (DataLoader)
-├── Frontend/               # React Web Arayüzü
-├── data/                   # Veri Seti Dizini (Git tarafından takip edilmez)
-│   └── raw/
-│       ├── Data_Entry_2017.csv
-│       └── images/
-├── saved_models/           # Eğitilmiş model dosyaları (.pth)
-└── requirements.txt        # Python bağımlılıkları
-Kurulum Rehberi
-Projeyi yerel ortamda çalıştırmak için aşağıdaki adımları takip edin.
+### 1. Bağımlılıkları Yükleyin
+Frontend klasörünün içindeyken terminalde şu komutu çalıştırın:
 
-1. Projenin Klonlanması
-Bash
+      npm install
 
-git clone [https://github.com/KULLANICI_ADI/xAI-chest.git](https://github.com/KULLANICI_ADI/xAI-chest.git)
-cd xAI-chest
-2. Backend Kurulumu (Python)
-macOS (Apple Silicon M1/M2/M3)
+Geliştirme Sunucusunu Başlatın
+Arayüzü yerel sunucuda (localhost) çalıştırmak için:
 
-Bash
+      npm run dev
 
-# Sanal ortam oluşturma
-python3.12 -m venv venv
+Site varsayılan olarak http://localhost:5173 adresinde açılacaktır.
 
-# Ortamı aktif etme
-source venv/bin/activate
+Backend Bağlantısı
+Bu arayüz, analiz yapabilmek için Backend API'sine ihtiyaç duyar. Lütfen Backend/App klasöründeki API'nin çalışır durumda olduğundan emin olun:
 
-# Bağımlılıkların yüklenmesi
-pip install -r requirements.txt
-Windows (NVIDIA GPU) Not: Windows ortamında PyTorch'un CUDA sürümü ayrıca kurulmalıdır.
+API Adresi: http://127.0.0.1:8000
 
-Bash
+Dosya Yapısı
+src/App.jsx: Ana uygulama mantığı ve tasarımın bulunduğu dosya.
 
-# Sanal ortam oluşturma
-python -m venv venv
+src/index.css: Tailwind tanımlamalarının ve global stillerin bulunduğu dosya.
 
-# Ortamı aktif etme
-venv\Scripts\activate
+tailwind.config.js: Tema ve renk ayarları.
 
-# PyTorch (CUDA Destekli) kurulumu
-pip3 install torch torchvision torchaudio --index-url [https://download.pytorch.org/whl/cu121](https://download.pytorch.org/whl/cu121)
+Prodüksiyon (Canlı) İçin Derleme
+Projeyi canlı sunucuya atmadan önce optimize edilmiş sürümü oluşturmak için:
 
-# Diğer bağımlılıkların yüklenmesi
-pip install -r requirements.txt
-3. Veri Setinin Hazırlanması
-NIH Chest X-Ray veri setini indirin ve proje dizininde aşağıdaki yapıyı oluşturun:
+      npm run build
 
-CSV Dosyası: data/raw/Data_Entry_2017.csv konumuna yerleştirilmelidir.
-
-Görüntüler: data/raw/images/ klasörü içerisine çıkartılmalıdır.
-
-Uygulamayı Çalıştırma
-Sistemi çalıştırmak için iki ayrı terminal penceresi kullanılmalıdır.
-
-Terminal 1: Backend (API)
-Bash
-
-# Sanal ortamın aktif olduğundan emin olun
-source venv/bin/activate  # Windows: venv\Scripts\activate
-
-cd Backend/App
-uvicorn api:app --reload
-API sunucusu http://127.0.0.1:8000 adresinde çalışmaya başlayacaktır.
-
-Terminal 2: Frontend (Web Arayüzü)
-Bash
-
-cd Frontend
-npm install  # İlk kurulumda gereklidir
-npm run dev
-Web arayüzü http://localhost:5173 adresinde erişilebilir olacaktır.
-
-Model Eğitimi
-Modeli sıfırdan eğitmek için aşağıdaki komut kullanılabilir. Eğitim parametreleri (Epoch, Batch Size vb.) train.py dosyası içerisindeki Config sınıfından düzenlenebilir.
-
-Bash
-
-# App klasöründeyken
-python train.py
-Lisans ve Referanslar
-Bu proje eğitim ve araştırma amaçlı geliştirilmiştir. Tıbbi teşhis için tek başına kullanılamaz.
-
-Veri Seti: NIH Chest X-Ray Dataset
+Bu işlem dist klasörü içerisine statik dosyaları oluşturur.
