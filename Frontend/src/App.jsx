@@ -61,7 +61,7 @@ function App() {
         <div className="max-w-7xl mx-auto px-4 h-16 flex justify-between items-center">
           <div className="flex items-center gap-2 cursor-pointer" onClick={() => window.scrollTo(0,0)}>
             <FaHeartbeat className="text-blue-600 text-3xl animate-pulse" />
-            <span className="font-bold text-2xl text-gray-800">Chest<span className="text-blue-600">AI</span></span>
+            <span className="font-bold text-2xl text-gray-800">Chest X-R<span className="text-blue-600">ai</span></span>
           </div>
           <div className="hidden md:flex space-x-8 font-medium">
             <a href="#analyzer" className="hover:text-blue-600 transition">Analiz</a>
