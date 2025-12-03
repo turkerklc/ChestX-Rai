@@ -47,12 +47,29 @@ function App() {
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
-    if (file) {
-      setSelectedFile(file);
-      setPreviewUrl(URL.createObjectURL(file));
-      setPredictions(null);
-      setHeatmapUrl(null);
+    if(!file) return; // eğer dosya seçilmediyse dur.
+
+    const validTypes = ['image/jpeg', 'image/png', 'image/jpg']; // sadece ekteki uzantıları kabul et.
+
+    if (!validTypes.includes(file.type)) {
+      alert("Hata: sadece JPEG, JPG ve PNG formatındaki resimler kabul edilir")
+      e.target.value = null //input'u temizle
+      return;
     }
+
+    //Dosya boyutunu kontrol et
+    const maxSize = 5 * 1024 * 1024; 
+    if (file.size > maxSize) {
+      alert("Hata: Dosya boyutu çok yüksek! Maksimum 5MB yükleyebilirsiniz");
+      e.target.value = null;
+      return;
+    }
+    
+    //Her şey okeyse devam et
+    setSelectedFile(file);
+    setPreviewUrl(URL.createObjectURL(file));
+    setPredictions(null);
+    setHeatmapUrl(null);
   };
 
   return (
@@ -89,7 +106,7 @@ function App() {
                 <FaCloudUploadAlt className="text-blue-600" /> Görüntü Yükle
               </h2>
               <div className="border-3 border-dashed border-blue-200 rounded-2xl bg-white p-8 text-center hover:border-blue-400 transition-all cursor-pointer relative group h-80 flex flex-col justify-center items-center">
-                <input type="file" accept="image/*" onChange={handleFileChange} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
+                <input type="file" accept=".jpg, .jpeg, .png" onChange={handleFileChange} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
                 {previewUrl ? (
                   <img src={previewUrl} alt="Preview" className="max-h-full max-w-full rounded-lg shadow-sm object-contain" />
                 ) : (
