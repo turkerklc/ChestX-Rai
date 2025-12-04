@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import axios from 'axios';
-import { FaCloudUploadAlt, FaHeartbeat, FaInfoCircle, FaUsers, FaArrowRight, FaMap, FaMapMarked, FaWatchmanMonitoring, FaCannabis, FaExclamation } from 'react-icons/fa';
+import { FaCloudUploadAlt, FaHeartbeat, FaInfoCircle, FaUsers, FaArrowRight, FaMap, FaMapMarked, FaWatchmanMonitoring, FaCannabis, FaExclamation, FaExclamationTriangle } from 'react-icons/fa';
+import logo from './assets/logo.jpeg'
 
 function App() {
   const [selectedFile, setSelectedFile] = useState(null);
@@ -44,6 +45,23 @@ function App() {
       setLoading(false);
     }
   };
+
+  const handleReset = () => {
+
+      setSelectedFile(null);
+      setPreviewUrl(null);
+      
+      setPredictions(null);
+      setHeatmapUrl(null);
+
+      setAge("");
+      setGender('');
+
+      const fileInput = document.getElementsById('file-upload')
+      if (fileInput) {
+        fileInput.value = '';
+      }
+    }
 
   const handleAgeChange = (e) => {
     const value = e.target.value;
@@ -92,10 +110,11 @@ function App() {
       <nav className="fixed top-0 w-full bg-white/90 backdrop-blur-md shadow-sm z-50">
         <div className="max-w-7xl mx-auto px-4 h-16 flex justify-between items-center">
           <div className="flex items-center gap-2 cursor-pointer" onClick={() => window.scrollTo(0,0)}>
-            <FaHeartbeat className="text-blue-600 text-3xl animate-pulse" />
-            <span className="font-bold text-2xl text-gray-800">Chest X-R<span className="text-blue-600">ai</span></span>
+           <img src={logo} alt="ChestXRai Logo" className="h-12 w-auto object-contain" 
+            />
+            <span className="font-bold text-2xl text-gray-800">ChestX-R<span className="text-[rgb(70,65,180)]">ai</span></span>
           </div>
-          <div className="hidden md:flex space-x-8 font-medium">
+          <div className="hidden md:flex space-x-10 font-normal">
             <a href="#analyzer" className="hover:text-blue-600 transition">Analiz</a>
             <a href="#details" className="hover:text-blue-600 transition">Proje Hakkında</a>
             <a href="#about" className="hover:text-blue-600 transition">Biz Kimiz</a>
@@ -107,7 +126,7 @@ function App() {
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-12">
             <h1 className="text-5xl font-extrabold text-gray-900 mb-4">
-              Yapay Zeka Destekli <span className="text-blue-600">Röntgen Analizi</span>
+              Yapay Zeka Destekli <span className="text-red-600">Röntgen Analizi</span>
             </h1>
             <p className="text-xl text-gray-500 max-w-2xl mx-auto">
               Saniyeler içinde 14 farklı akciğer hastalığını tespit edin ve xAI teknolojisi ile görsel kanıtları inceleyin.
@@ -121,7 +140,7 @@ function App() {
                 <FaCloudUploadAlt className="text-blue-600" /> Görüntü Yükle
               </h2>
               <div className="border-3 border-dashed border-blue-200 rounded-2xl bg-white p-8 text-center hover:border-blue-400 transition-all cursor-pointer relative group h-80 flex flex-col justify-center items-center">
-                <input type="file" accept=".jpg, .jpeg, .png" onChange={handleFileChange} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
+                <input type="file" id = "file-upload" accept=".jpg, .jpeg, .png" onChange={handleFileChange} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
                 {previewUrl ? (
                   <img src={previewUrl} alt="Preview" className="max-h-full max-w-full rounded-lg shadow-sm object-contain" />
                 ) : (
@@ -147,15 +166,28 @@ function App() {
                   </select>
                 </div>
               </div>
+             <div className="flex gap-3 mt-6">
+            {/* ANA BUTON (Analiz Et) */}
+            <button 
+              onClick={handleAnalyze} 
+              disabled={loading || !selectedFile}
+              className={`flex-1 py-4 rounded-xl font-bold text-white shadow-lg transition-all transform active:scale-95 ${
+                loading ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 hover:-translate-y-0.5'
+              }`}
+            >
+              {loading ? 'Analiz Ediliyor...' : 'Analizi Başlat'}
+            </button>
+
+            {/* SIFIRLA BUTONU (Sadece dosya seçiliyse veya sonuç varsa görünür) */}
+            {(selectedFile || predictions) && (
               <button 
-                onClick={handleAnalyze} 
-                disabled={loading || !selectedFile}
-                className={`w-full mt-6 py-4 rounded-xl font-bold text-white shadow-lg transition-all transform active:scale-95 ${
-                  loading ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 hover:-translate-y-1'
-                }`}
+                onClick={handleReset}
+                className="px-6 py-4 rounded-xl font-bold text-white bg-red-600 hover:bg-red-700 hover:-translate-y-0.5 transition-all active:scale-95 border border-gray-300"
               >
-                {loading ? 'Analiz Ediliyor...' : 'Analizi Başlat'}
+                Sıfırla
               </button>
+            )}
+          </div>
             </div>
 
             {/* SAĞ PANEL */}
@@ -181,7 +213,7 @@ function App() {
                         <div key={label} className="bg-white p-3 rounded-xl border border-gray-100 shadow-sm">
                           <div className="flex justify-between items-end mb-2">
                             <span className="font-medium text-gray-700">{label}</span>
-                            <span className={`font-bold ${score > 0.5 ? 'text-red-500' : 'text-blue-600'}`}>
+                            <span className={`font-bold ${score > 0.5 ? 'text-red-600' : 'text-blue-600'}`}>
                               {(score * 100).toFixed(1)}%
                             </span>
                           </div>
@@ -247,7 +279,7 @@ function App() {
         </div>
       </section>
 
-      <footer className="bg-gray-900 text-white py-8 text-center"><p>&copy; 2025 ChestAI</p></footer>
+      <footer className="bg-gray-900 text-white py-8 text-center"><p>&copy; 2025 ChestX-Rai</p></footer>
     </div>
   );
 }
