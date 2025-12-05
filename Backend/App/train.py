@@ -14,9 +14,9 @@ from tqdm import tqdm
 
 # --- AYARLAR (RTX 5090 İÇİN OPTİMİZE EDİLDİ) ---
 CONFIG = {
-    'IMG_SIZE': 224,        # ResNet standart girişi (Daha yüksek isterseniz 512 yapın ama 224 daha stabildir)
+    'IMG_SIZE': 512,        # ResNet standart girişi (Daha yüksek isterseniz 512 yapın ama 224 daha stabildir)
     'BATCH_SIZE': 64,       # 5090'ın belleği yeter, artırılabilir (128 denenebilir)
-    'EPOCHS': 20,           # Eğitim süresi
+    'EPOCHS': 25,           # Eğitim süresi
     'LEARNING_RATE': 1e-4,  # Hassas öğrenme
     'DATA_CSV': 'Data_Entry_2017.csv',
     'IMG_DIR': 'images',    # Resimlerin olduğu klasör
