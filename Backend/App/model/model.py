@@ -3,71 +3,45 @@ import torch.nn as nn
 from torchvision import models
 import logging
 
-# Loglama ayarı (Terminalde temiz bilgi görmek için)
 logger = logging.getLogger(__name__)
 
 class XRayResNet50(nn.Module):
-    """
-    NIH Chest X-Ray için özelleştirilmiş ResNet50 Modeli.
-    
-    Özellikler:
-    - Pretrained ImageNet ağırlıkları ile başlar (Transfer Learning).
-    - Son katman (FC) 14 hastalık sınıfına göre yeniden yapılandırılır.
-    - xAI (Grad-CAM) entegrasyonuna uygun yapıdadır.
-    """
-    
-    def __init__(self, num_classes: int, pretrained: bool = True):
+    def __init__(self, num_classes: int, pretrained: bool = False):
         super(XRayResNet50, self).__init__()
         
-        logger.info(f"🧠 Model Mimarisisi Başlatılıyor: ResNet50 (Pretrained={pretrained})")
+        # 1. ResNet50'yi Yükle
+        base_model = models.resnet50(weights=None)
         
-        # 1. Backbone (Omurga) Yükle
-        # ImageNet ağırlıklarını kullanmak, eğitimin çok daha hızlı ve başarılı olmasını sağlar.
-        weights = models.ResNet50_Weights.DEFAULT if pretrained else None
-        self.backbone = models.resnet50(weights=weights)
+        # 2. ResNet'in tüm katmanlarını bu sınıfın (self) bir parçası yap
+        # (Böylece state_dict anahtarları 'conv1', 'layer1' diye başlar, 'backbone.conv1' diye değil)
+        self.conv1 = base_model.conv1
+        self.bn1 = base_model.bn1
+        self.relu = base_model.relu
+        self.maxpool = base_model.maxpool
         
-        # 2. Classifier (Sınıflandırıcı) Katmanını Değiştir
-        # ResNet50'nin orijinal FC (Fully Connected) katmanı 2048 giriş -> 1000 çıkış verir.
-        # Biz bunu 2048 giriş -> num_classes (14) çıkış yapacağız.
+        self.layer1 = base_model.layer1
+        self.layer2 = base_model.layer2
+        self.layer3 = base_model.layer3
+        self.layer4 = base_model.layer4
         
-        in_features = self.backbone.fc.in_features # Genelde 2048'dir
+        self.avgpool = base_model.avgpool
         
-        # Yeni katmanı oluşturuyoruz
-        self.backbone.fc = nn.Linear(in_features, num_classes)
-        
-        logger.info(f"🔧 Modelin son katmanı {in_features} giriş -> {num_classes} çıkış (Hastalık) olarak güncellendi.")
+        # 3. Son Katmanı (FC) Değiştir
+        in_features = base_model.fc.in_features
+        self.fc = nn.Linear(in_features, num_classes)
 
     def forward(self, x):
-        """
-        Veri modelin içinden akar.
-        x: Görüntü Batch'i [Batch_Size, 3, 224, 224]
-        return: Tahminler (Logits) [Batch_Size, num_classes]
-        """
-        return self.backbone(x)
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.maxpool(x)
 
-# --- TEST BLOĞU (Terminalden çalıştırılınca devreye girer) ---
-if __name__ == "__main__":
-    # Logları ekrana basması için basit konfigürasyon
-    logging.basicConfig(level=logging.INFO)
-    
-    try:
-        # 1. Modeli 14 hastalık sınıfı için oluştur
-        model = XRayResNet50(num_classes=14)
-        
-        # 2. Sahte bir veri ile test et (M2 MPS veya CPU)
-        device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
-        model = model.to(device)
-        
-        # [Batch Size=2, Kanal=3 (RGB), Boyut=224x224]
-        dummy_input = torch.randn(2, 3, 224, 224).to(device)
-        
-        # Forward pass (Tahmin yap)
-        output = model(dummy_input)
-        
-        print("\n✅ TEST BAŞARILI!")
-        print(f"   Giriş Boyutu: {dummy_input.shape}")
-        print(f"   Çıkış Boyutu: {output.shape}") 
-        print(f"   Cihaz: {device}")
-        
-    except Exception as e:
-        print(f"❌ HATA: {e}")
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        x = self.layer4(x) # Grad-CAM için buraya kanca atacağız
+
+        x = self.avgpool(x)
+        x = torch.flatten(x, 1)
+        x = self.fc(x)
+        return x

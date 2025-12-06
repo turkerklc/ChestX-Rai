@@ -150,7 +150,7 @@ async def explain_endpoint(file: UploadFile = File(...)):
     
     # 3. Grad-CAM Çalıştır
     # ResNet50'nin son konvolüsyon katmanı: backbone.layer4
-    target_layers = [viz_model.backbone.layer4[-1]]
+    target_layers = [viz_model.layer4[-1]]
     cam = GradCAM(model=viz_model, target_layers=target_layers)
     
     # Otomatik en yüksek sınıfı hedefle (targets=None)
