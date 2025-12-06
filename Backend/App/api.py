@@ -23,12 +23,12 @@ except ImportError:
       sys.exit(1)
 
 PROJECT_ROOT = CURRENT_DIR.parent.parent
-MODEL_PATH = PROJECT_ROOT / "saved_models" / "resnet50_epoch_5.pth"
+MODEL_PATH = PROJECT_ROOT / "saved_models" / "chest_xray_model.pth"
 
 LABELS = [ 
     'Atelectasis', 'Cardiomegaly', 'Consolidation', 'Edema', 'Effusion', 
     'Emphysema', 'Fibrosis', 'Hernia', 'Infiltration', 'Mass', 
-    'Nodule', 'Pleural_Thickening', 'Pneumonia', 'Pneumothorax'
+    'Nodule', 'Pleural_Thickening', 'Pneumonia', 'Pneumothorax', 'No Finding'
 ]
 
 app = FastAPI(
@@ -93,7 +93,7 @@ async def predict_endpoint(file: UploadFile = File(...)):
     
     # Resmi Hazırla (Eğitimdeki aynı transformlar)
     transform = transforms.Compose([
-        transforms.Resize((224, 224)),
+        transforms.Resize((512, 512)),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
