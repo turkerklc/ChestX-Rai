@@ -141,8 +141,8 @@ def train_model():
     val_dataset = ChestXrayDataset(val_df, CONFIG['IMG_DIR'], val_transform, mlb)
 
     # num_workers=8 veya 16 yapabilir Eray (CPU çekirdeğine göre)
-    train_loader = DataLoader(train_dataset, batch_size=CONFIG['BATCH_SIZE'], shuffle=True, num_workers=4, pin_memory=True)
-    val_loader = DataLoader(val_dataset, batch_size=CONFIG['BATCH_SIZE'], shuffle=False, num_workers=4, pin_memory=True)
+    train_loader = DataLoader(train_dataset, batch_size=CONFIG['BATCH_SIZE'], shuffle=True, num_workers=16, pin_memory=True)
+    val_loader = DataLoader(val_dataset, batch_size=CONFIG['BATCH_SIZE'], shuffle=False, num_workers=16, pin_memory=True)
 
     # 6. Modeli Kur
     model = build_model(len(classes))
