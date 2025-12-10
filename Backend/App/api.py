@@ -25,11 +25,30 @@ except ImportError:
 PROJECT_ROOT = CURRENT_DIR.parent.parent
 MODEL_PATH = PROJECT_ROOT / "saved_models" / "chest_xray_model.pth"
 
-LABELS = [ 
-    'Atelectasis', 'Cardiomegaly', 'Consolidation', 'Edema', 'Effusion', 
-    'Emphysema', 'Fibrosis', 'Hernia', 'Infiltration', 'Mass', 
-    'Nodule', 'Pleural_Thickening', 'Pneumonia', 'Pneumothorax', 'No Finding'
+# --- DÜZELTİLMİŞ ALFABETİK LİSTE ---
+LABELS = [
+    'Atelectasis',
+    'Cardiomegaly',
+    'Consolidation',
+    'Edema',
+    'Effusion',
+    'Emphysema',
+    'Fibrosis',
+    'Hernia',
+    'Infiltration',
+    'Mass',
+    'No Finding',       # <-- 10. Sıra (Doğru Yer)
+    'Nodule',
+    'Pleural_Thickening',
+    'Pneumonia',        # <-- 13. Sıra (Doğru Yer)
+    'Pneumothorax'
 ]
+
+# Başlangıçta Listeyi Kontrol Et (Terminalde Yazar)
+print("--- LİSTE KONTROLÜ ---")
+print(f"10. Sıra (Beklenen: No Finding): {LABELS[10]}")
+print(f"13. Sıra (Beklenen: Pneumonia):  {LABELS[13]}")
+print("----------------------")
 
 app = FastAPI(
       title = "Chest X-Ray xAI ",
@@ -38,9 +57,9 @@ app = FastAPI(
 )
 app.add_middleware(
       CORSMiddleware,
-      allow_origins=["*"],  # Güvenlik için prodüksiyonda site adresi yazılır, şimdilik herkese açık (*) olsun.
+      allow_origins=["*"],
       allow_credentials = True,
-      allow_methods=["*"],  # GET, POST, vb. hepsi serbest
+      allow_methods=["*"],
       allow_headers=["*"],
       )
 
@@ -57,7 +76,6 @@ async def startup_event():
 
       if not MODEL_PATH.exists():
             print(f"Model dosyası bulunamadı -> {MODEL_PATH}")
-            #hata durumunda boş modelle devam etmemek için raise et ileride
             return
       
       #Modeli Yükle
@@ -73,7 +91,6 @@ async def startup_event():
       print("Model hazır ve istek bekliyor")
 
 def process_image(image_bytes):
-      #Gelen byte verisini PIL görüntüsüne çevirir.
       try:
          image = Image.open(io.BytesIO(image_bytes)).convert('RGB')
          return image
@@ -98,6 +115,7 @@ async def predict_endpoint(file: UploadFile = File(...)):
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
     
+    # --- İŞTE BU SATIR SİLİNMİŞTİ, GERİ EKLENDİ ---
     input_tensor = transform(image).unsqueeze(0).to(device)
     
     # Tahmin
@@ -105,10 +123,16 @@ async def predict_endpoint(file: UploadFile = File(...)):
         logits = model(input_tensor)
         probs = torch.sigmoid(logits).squeeze().cpu().numpy()
     
+    # --- SUÇÜSTÜ LOGLARI ---
+    max_index = probs.argmax()
+    max_score = probs[max_index]
+    current_label_at_index = LABELS[max_index]
+    
+  
+
     # Sonuçları Sözlüğe Çevir
     results = {label: float(prob) for label, prob in zip(LABELS, probs)}
     
-    # Olasılığa göre büyükten küçüğe sırala
     sorted_results = dict(sorted(results.items(), key=lambda x: x[1], reverse=True))
     
     return JSONResponse(content=sorted_results)
@@ -122,50 +146,38 @@ async def explain_endpoint(file: UploadFile = File(...)):
     if model is None:
         raise HTTPException(status_code=503, detail="Model henüz yüklenmedi.")
 
-    # Grad-CAM için CPU kullanmak görselleştirmede daha stabildir
     target_device = torch.device("cpu")
-    # Modeli geçici olarak CPU'ya kopyala veya taşı (Hafif bir işlem)
-    # Not: Performans için ana model device'ında da yapılabilir ama MPS bazen Grad-CAM kancalarında sorun çıkarabilir.
     viz_model = XRayResNet50(num_classes=len(LABELS), pretrained=False).to(target_device)
-    viz_model.load_state_dict(model.state_dict()) # Ana modelin ağırlıklarını al
+    viz_model.load_state_dict(model.state_dict())
     viz_model.eval()
 
     image_bytes = await file.read()
     
-    # 1. Görüntüyü OpenCV formatına (Numpy) çevir
     nparr = np.frombuffer(image_bytes, np.uint8)
     img_bgr = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
     img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
     
-    # 0-1 Arası Float ve Resize
     img_float = np.float32(img_rgb) / 255
     img_float = cv2.resize(img_float, (224, 224))
     
-    # 2. Tensor Hazırla
     transform = transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
     input_tensor = transform(Image.fromarray((img_float * 255).astype(np.uint8))).unsqueeze(0).to(target_device)
     
-    # 3. Grad-CAM Çalıştır
-    # ResNet50'nin son konvolüsyon katmanı: backbone.layer4
     target_layers = [viz_model.layer4[-1]]
     cam = GradCAM(model=viz_model, target_layers=target_layers)
     
-    # Otomatik en yüksek sınıfı hedefle (targets=None)
     grayscale_cam = cam(input_tensor=input_tensor, targets=None)
     grayscale_cam = grayscale_cam[0, :]
     
-    # 4. Görüntüleri Birleştir
     cam_image = show_cam_on_image(img_float, grayscale_cam, use_rgb=True)
     
-    # 5. Geriye Resim Olarak Gönder
     res, im_png = cv2.imencode(".png", cv2.cvtColor(cam_image, cv2.COLOR_RGB2BGR))
     
     return StreamingResponse(io.BytesIO(im_png.tobytes()), media_type="image/png")
 
 if __name__ == "__main__":
     import uvicorn
-    # Dosya direkt çalıştırılırsa (python api.py)
     uvicorn.run(app, host="0.0.0.0", port=8000)
