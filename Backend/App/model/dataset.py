@@ -119,7 +119,7 @@ class NIHChestXrayDataset(Dataset):
             gender = 1.0 if row['Patient Gender'] == 'M' else 0.0
             age = float(row['Patient Age'])
             # Yaşı normalize etmek (0-100 arası varsayımıyla) model performansını artırabilir
-            # age = age / 100.0 
+            age = age / 100.0 
         except ValueError:
             gender, age = 0.0, 0.0 # Hatalı veri varsa varsayılan değer
 
