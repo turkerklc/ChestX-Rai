@@ -1,107 +1,90 @@
-# ChestAI: Explainable Chest X-Ray Analysis
+NIH Chest X-Ray Multi-Label Classification & XAI
+Bu proje, NIH Chest X-Ray veri setini kullanarak 14 farklı göğüs hastalığını tespit eden Hibrit bir Derin Öğrenme Modeli geliştirmeyi amaçlar. Standart CNN yaklaşımlarından farklı olarak, görsel verileri hasta demografik bilgileriyle (Yaş ve Cinsiyet) birleştiren bir mimari kullanır ve Grad-CAM ile açıklanabilir yapay zeka (XAI) çıktıları sunar.
 
-![Status](https://img.shields.io/badge/Status-Development-blue) ![Python](https://img.shields.io/badge/Python-3.12-yellow) ![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-red) ![License](https://img.shields.io/badge/License-MIT-green)
 
-**ChestAI**, akciğer röntgenlerinden 14 farklı toraks hastalığını tespit eden ve Grad-CAM tekniği kullanarak modelin odaklandığı bölgeleri görselleştiren (xAI) bir derin öğrenme projesidir.
+- DenseNet121 omurgasından gelen görsel özellikler (Image Features), hasta meta verileri (Yaş ve Cinsiyet) ile birleştirilerek sınıflandırma yapılır.
 
-## Proje Özellikleri
+- ImageNet ağırlıklarıyla eğitilmiş DenseNet121 kullanılmıştır.
 
-* **Derin Öğrenme Mimarisi:** NIH Chest X-Ray veri seti üzerinde eğitilmiş, özelleştirilmiş ResNet-50 modeli.
-* **Açıklanabilir Yapay Zeka (xAI):** Modelin karar mekanizmasını şeffaflaştıran Grad-CAM ısı haritası görselleştirmesi.
-* **Web Arayüzü:** React ve Tailwind CSS ile geliştirilmiş modern kullanıcı arayüzü.
-* **Çapraz Platform:** macOS (Apple Silicon) ve Windows (NVIDIA CUDA) üzerinde çalışabilen hibrit backend yapısı.
+-  Veri setindeki dengesizliği yönetmek için dinamik olarak hesaplanan Weighted Cross-Entropy Loss kullanılır.
 
-## Proje Yapısı
+- Grad-CAM entegrasyonu sayesinde modelin röntgen üzerinde odaklandığı bölgeler ısı haritası (heatmap) olarak görselleştirilir.
 
-```text
-xAI-chest/
-├── App/                    # Backend Kaynak Kodları (FastAPI & PyTorch)
-│   ├── api.py              # API Sunucusu
-│   ├── train.py            # Model Eğitim Scripti
-│   ├── predict.py          # Tekli Tahmin Scripti
-│   ├── explain.py          # Grad-CAM Görselleştirme Modülü
-│   └── model/              # Model Mimarisi ve Veri İşleme
-│       ├── model.py        # ResNet-50 Sınıfı
-│       └── dataset.py      # Veri Yükleyici (DataLoader)
-├── Frontend/               # React Web Arayüzü
-├── data/                   # Veri Seti Dizini (Git tarafından takip edilmez)
-│   └── raw/
-│       ├── Data_Entry_2017.csv
-│       └── images/
-├── saved_models/           # Eğitilmiş model dosyaları (.pth)
-└── requirements.txt        # Python bağımlılıkları
-Kurulum Rehberi
-Projeyi yerel ortamda çalıştırmak için aşağıdaki adımları takip edin.
+- FastAPI tabanlı backend servisi ile model, web veya mobil uygulamalara entegre edilebilir.
 
-1. Projenin Klonlanması
+Cross-Platform: NVIDIA GPU (CUDA), Apple Silicon (MPS) ve CPU üzerinde çalışabilir.
+
+ Mimari Yapı
+Model, HybridDenseNet121 sınıfı altında kurgulanmıştır:
+
+Görsel Giriş: 512x512 piksel göğüs röntgeni -> DenseNet121 -> 1024 özellik vektörü.
+
+Meta Giriş: Normalize edilmiş Yaş (Age/100) ve Cinsiyet (M=1, F=0) -> 2 özellik vektörü.
+
+Füzyon (Fusion): 1024 + 2 = 1026 boyutlu birleşik vektör.
+
+Sınıflandırıcı: Fully Connected Layers + ReLU + Dropout -> 14 Hastalık Sınıfı.
+
+ Proje Yapısı
+Plaintext
+
+├── Backend
+│   └── App
+│       ├── api.py           # FastAPI sunucusu ve tahmin endpointleri
+│       ├── train.py         # Model eğitim döngüsü ve validasyon
+│       ├── evaluate.py      # AUC, F1, Sensitivity metriklerinin hesaplanması
+│       └── model
+│           ├── model.py     # HybridDenseNet121 mimarisi
+│           └── dataset.py   # Veri yükleme, işleme ve augmentation
+├── data
+│   └── raw                  # Ham veri (images ve csv)
+├── saved_models             # Eğitilen model (.pth) ve sınıf isimleri (.json)
+└── requirements.txt         # Gerekli Python kütüphaneleri
+ Kurulum
+Gerekli bağımlılıkları yükleyin:
+
 Bash
 
-git clone [https://github.com/KULLANICI_ADI/xAI-chest.git](https://github.com/KULLANICI_ADI/xAI-chest.git)
-cd xAI-chest
-2. Backend Kurulumu (Python)
-macOS (Apple Silicon M1/M2/M3)
-
-Bash
-
-# Sanal ortam oluşturma
-python3.12 -m venv venv
-
-# Ortamı aktif etme
-source venv/bin/activate
-
-# Bağımlılıkların yüklenmesi
 pip install -r requirements.txt
-Windows (NVIDIA GPU) Not: Windows ortamında PyTorch'un CUDA sürümü ayrıca kurulmalıdır.
+Not: PyTorch kurulumu sisteminize (CUDA/Mac) göre değişiklik gösterebilir.
+
+ Kullanım
+1. Model Eğitimi (Training)
+Modeli eğitmek için aşağıdaki komutu çalıştırın. Eğitim sonucunda en iyi ağırlıklar saved_models/hybrid_densenet_best.pth olarak kaydedilecektir.
 
 Bash
 
-# Sanal ortam oluşturma
-python -m venv venv
+python Backend/App/train.py
+Konfigürasyon (Batch size, Epoch, Learning Rate) train.py içerisindeki CONFIG sözlüğünden değiştirilebilir.
 
-# Ortamı aktif etme
-venv\Scripts\activate
-
-# PyTorch (CUDA Destekli) kurulumu
-pip3 install torch torchvision torchaudio --index-url [https://download.pytorch.org/whl/cu121](https://download.pytorch.org/whl/cu121)
-
-# Diğer bağımlılıkların yüklenmesi
-pip install -r requirements.txt
-3. Veri Setinin Hazırlanması
-NIH Chest X-Ray veri setini indirin ve proje dizininde aşağıdaki yapıyı oluşturun:
-
-CSV Dosyası: data/raw/Data_Entry_2017.csv konumuna yerleştirilmelidir.
-
-Görüntüler: data/raw/images/ klasörü içerisine çıkartılmalıdır.
-
-Uygulamayı Çalıştırma
-Sistemi çalıştırmak için iki ayrı terminal penceresi kullanılmalıdır.
-
-Terminal 1: Backend (API)
-Bash
-
-# Sanal ortamın aktif olduğundan emin olun
-source venv/bin/activate  # Windows: venv\Scripts\activate
-
-cd Backend/App
-uvicorn api:app --reload
-API sunucusu http://127.0.0.1:8000 adresinde çalışmaya başlayacaktır.
-
-Terminal 2: Frontend (Web Arayüzü)
-Bash
-
-cd Frontend
-npm install  # İlk kurulumda gereklidir
-npm run dev
-Web arayüzü http://localhost:5173 adresinde erişilebilir olacaktır.
-
-Model Eğitimi
-Modeli sıfırdan eğitmek için aşağıdaki komut kullanılabilir. Eğitim parametreleri (Epoch, Batch Size vb.) train.py dosyası içerisindeki Config sınıfından düzenlenebilir.
+2. Model Değerlendirme (Evaluation)
+Eğitilen modelin AUC, F1-Score, Sensitivity ve Specificity metriklerini görmek için:
 
 Bash
 
-# App klasöründeyken
-python train.py
-Lisans ve Referanslar
-Bu proje eğitim ve araştırma amaçlı geliştirilmiştir. Tıbbi teşhis için tek başına kullanılamaz.
+python Backend/App/evaluate.py
+3. API Başlatma
+Tahmin sistemini ve arayüzü ayağa kaldırmak için:
 
-Veri Seti: NIH Chest X-Ray Dataset
+Bash
+
+python Backend/App/api.py
+API varsayılan olarak http://localhost:8000 adresinde çalışır.
+
+ API Endpointleri
+API, Swagger UI dokümantasyonu ile gelir (/docs).
+
+POST /predict: Görüntü, yaş ve cinsiyet alır; hastalık olasılıklarını JSON olarak döner.
+
+POST /explain: Görüntü, yaş ve cinsiyet alır; Grad-CAM ısı haritası uygulanmış görseli döner.
+
+ Gereksinimler
+Python 3.8+
+
+PyTorch, Torchvision
+
+Pandas, Numpy, OpenCV
+
+FastAPI, Uvicorn
+
+grad-cam (pytorch-grad-cam)
