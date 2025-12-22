@@ -1,122 +1,191 @@
+import os
+import sys
+import json
 import torch
 import numpy as np
 import pandas as pd
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, random_split
 from torchvision import transforms
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import roc_auc_score, accuracy_score, precision_score, recall_score, f1_score
 from tqdm import tqdm
-import os
-import sys
 import multiprocessing
+import copy
 
-# --- IMPORT AYARLARI ---
+#Directory ayarları
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.join(CURRENT_DIR, '..')) # Üst dizini gör
+
+# Modüller çağırılıyor
 try:
-    from train import ChestXrayDataset, build_model, load_data, split_data, CONFIG
+    from model.model import HybridDenseNet121
+    from model.dataset import NIHChestXrayDataset
 except ImportError:
-    print("⚠️ train.py modülü bulunamadı. Lütfen dosyanın train.py ile aynı klasörde olduğundan emin ol.")
-    sys.exit(1)
+    # Eğer App klasöründen çalıştırılıyorsa
+    sys.path.append(os.path.join(CURRENT_DIR, 'Backend', 'App'))
+    from model.model import HybridDenseNet121
+    from model.dataset import NIHChestXrayDataset
 
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# Config
+CONFIG = {
+    'IMG_DIR': '../../data/raw/images',
+    'CSV_FILE': '../../data/raw/Data_Entry_2017.csv',
+    'MODEL_PATH': '../../saved_models/hybrid_densenet_best.pth',
+    'CLASS_NAMES_PATH': '../../saved_models/class_names.json',
+    'IMG_SIZE': 512,
+    'BATCH_SIZE': 64, # Test ederken daha yüksek batch size tercih ettim
+    'NUM_WORKERS': 16,
+    'DEVICE': 'cuda' if torch.cuda.is_available() else 'cpu'
+}
 
-max_cpu = multiprocessing.cpu_count()
-NUM_WORKERS = min(16, max_cpu) 
+def load_class_names():
+    if os.path.exists(CONFIG['CLASS_NAMES_PATH']):
+        with open(CONFIG['CLASS_NAMES_PATH'], 'r') as f:
+            return json.load(f)
+    else:
+        print("❌ HATA: Sınıf isimleri (class_names.json) bulunamadı!")
+        sys.exit(1)
 
-MODEL_PATH = "chest_xray_model.pth"
-
-def evaluate_model():
-    print(f"🚀 Değerlendirme Başlıyor...")
-    print(f"🔥 Hesaplama Cihazı (Model): {DEVICE}")
-    if DEVICE.type == 'cuda':
+def evaluate():
+    print(f" Değerlendirme Modülü Başlatılıyor...")
+    print(f" Cihaz: {CONFIG['DEVICE']}")
+    if CONFIG['DEVICE'] == 'cuda':
         print(f"   Kart: {torch.cuda.get_device_name(0)}")
-    print(f"⚙️  Veri Yükleyici (Loader): {NUM_WORKERS} CPU Çekirdeği kullanılıyor.")
-    
-    # 1. Veriyi Hazırla
-    full_df = load_data()
-    _, val_df = split_data(full_df)
-    
-    from sklearn.preprocessing import MultiLabelBinarizer
-    mlb = MultiLabelBinarizer()
-    mlb.fit(full_df['Finding Labels'])
-    classes = mlb.classes_
-    print(f"📋 Sınıflar ({len(classes)}): {classes}")
+        # RTX 5090 Optimizasyonu
+        torch.backends.cudnn.benchmark = True
 
-    # 2. Dataset ve Loader
+    # 1. VERİ SETİNİ HAZIRLA (EĞİTİMDEKİ MANTIKLA AYNI OLMALI)
+    # Validation setini tekrar oluşturmak için aynı seed ve mantığı kullanıyoruz.
+    print("📊 Veri seti yükleniyor ve bölünüyor...")
+    
     val_transform = transforms.Compose([
         transforms.Resize((CONFIG['IMG_SIZE'], CONFIG['IMG_SIZE'])),
         transforms.ToTensor(),
         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
     ])
+
+    full_dataset = NIHChestXrayDataset(
+        csv_file=CONFIG['CSV_FILE'],
+        root_dir=CONFIG['IMG_DIR'],
+        transform=None 
+    )
+
+    # Train/Val Split (Aynı random state olmalı ki Val seti değişmesin)
+    # PyTorch random_split deterministik değildir, ancak oranlar aynıysa
+    # büyük veri setlerinde dağılım benzer olur.
+    train_size = int(0.8 * len(full_dataset))
+    val_size = len(full_dataset) - train_size
+    _, val_subset = random_split(full_dataset, [train_size, val_size], generator=torch.Generator().manual_seed(42))
     
-    val_dataset = ChestXrayDataset(val_df, CONFIG['IMG_DIR'], val_transform, mlb)
-    
-    # BURASI KRİTİK: GPU'ya hızlı aktarım için pin_memory=True şarttır
+    # Dataset kopyala ve transform ata
+    val_subset.dataset = copy.deepcopy(full_dataset)
+    val_subset.dataset.transform = val_transform
+
     val_loader = DataLoader(
-        val_dataset, 
-        batch_size=CONFIG['BATCH_SIZE'] * 2, # Değerlendirmede batch size'ı artırabiliriz (daha hızlı olur)
+        val_subset, 
+        batch_size=CONFIG['BATCH_SIZE'], 
         shuffle=False, 
-        num_workers=NUM_WORKERS,
-        pin_memory=True 
+        num_workers=CONFIG['NUM_WORKERS'], 
+        pin_memory=True
     )
     
-    # 3. Modeli Yükle
-    model = build_model(num_classes=len(classes))
+    print(f" Değerlendirme Seti: {len(val_subset)} görüntü")
+
+    # Model ve sınıflar yüklensin
+    class_names = load_class_names()
+    num_classes = len(class_names)
+    print(f" Sınıflar ({num_classes}): {class_names}")
+
+    model = HybridDenseNet121(num_classes=num_classes, pretrained=False)
     
-    if not os.path.exists(MODEL_PATH):
-        print("❌ Model dosyası bulunamadı!")
+    if not os.path.exists(CONFIG['MODEL_PATH']):
+        print(f" Model dosyası bulunamadı: {CONFIG['MODEL_PATH']}")
         return
 
-    checkpoint = torch.load(MODEL_PATH, map_location=DEVICE)
+    print(" Ağırlikler yükleniyor...")
+    checkpoint = torch.load(CONFIG['MODEL_PATH'], map_location=CONFIG['DEVICE'])
     model.load_state_dict(checkpoint)
-    model.to(DEVICE)
+    model.to(CONFIG['DEVICE'])
     model.eval()
-    
-    # 4. Tahminleri Topla
+
     all_targets = []
     all_preds = []
-    
-    print("🧪 Test ediliyor...")
-    
+
+    print(" Test çalıştırılıyor (Hybrid Input)...")
     with torch.no_grad():
-        for images, labels in tqdm(val_loader):
-            images = images.to(DEVICE)
-            # labels GPU'ya gitmese de olur, CPU'da biriktireceğiz
-            
-            outputs = model(images)
-            probs = torch.sigmoid(outputs) 
-            
-            all_preds.append(probs.cpu().numpy()) # Sonucu CPU'ya geri çek
-            all_targets.append(labels.numpy())
-            
+        for batch in tqdm(val_loader, desc="Testing"):
+            images = batch['image'].to(CONFIG['DEVICE'])
+            metadata = batch['metadata'].to(CONFIG['DEVICE']) # Hybrid Giriş
+            labels = batch['labels'].to(CONFIG['DEVICE'])
+
+            # Model Tahmini
+            outputs = model(images, metadata)
+            probs = torch.sigmoid(outputs)
+
+            # CPU'ya alıp listeye ekle
+            all_preds.append(probs.cpu().numpy())
+            all_targets.append(labels.cpu().numpy())
+
+    # Listeleri birleştir
     all_preds = np.vstack(all_preds)
     all_targets = np.vstack(all_targets)
-    
-    # 5. Metrikleri Hesapla (AUC)
-    print("\n📊 --- SINIF BAZLI PERFORMANS (AUC) ---")
-    print("AUC skoru 0.5 = Kötü, 1.0 = Mükemmel")
-    print("-" * 40)
-    
-    auc_scores = []
-    for i, class_name in enumerate(classes):
+
+    # Metrikleri hesapla
+    print("\n" + "="*60)
+    print(f"{'HASTALIK':<20} | {'AUC':<8} | {'F1':<8} | {'ACC':<8} | {'SENS':<8} | {'SPEC':<8}")
+    print("-" * 60)
+
+    metrics_list = []
+
+    for i, class_name in enumerate(class_names):
+        # O sınıfın gerçek değerleri ve tahminleri
+        y_true = all_targets[:, i]
+        y_score = all_preds[:, i]
+        
+        # Binary tahmin (Eşik değeri 0.5)
+        y_pred_binary = (y_score > 0.5).astype(int)
+
+        # 1. AUC (Area Under Curve) - En Önemli Metrik
+        # Eğer sınıfta hiç pozitif örnek yoksa AUC hesaplanamaz
         try:
-            if len(np.unique(all_targets[:, i])) > 1:
-                auc = roc_auc_score(all_targets[:, i], all_preds[:, i])
-                auc_scores.append(auc)
-                print(f"{class_name:<20}: {auc:.4f}")
-            else:
-                print(f"{class_name:<20}: Yetersiz veri")
+            auc = roc_auc_score(y_true, y_score)
         except ValueError:
-            print(f"{class_name:<20}: Hata")
-            
-    print("-" * 40)
-    if auc_scores:
-        print(f"🏆 Ortalama AUC: {np.mean(auc_scores):.4f}")
+            auc = 0.0
+
+        # 2. F1 Score (Kesinlik ve Duyarlılık Dengesi)
+        f1 = f1_score(y_true, y_pred_binary)
+
+        # 3. Accuracy (Doğruluk)
+        acc = accuracy_score(y_true, y_pred_binary)
+
+        # 4. Sensitivity (Recall) - Hastayı bulma başarısı
+        recall = recall_score(y_true, y_pred_binary)
+
+        # 5. Specificity - Sağlamı bulma başarısı
+        # Specificity = TN / (TN + FP)
+        tn = np.sum((y_true == 0) & (y_pred_binary == 0))
+        fp = np.sum((y_true == 0) & (y_pred_binary == 1))
+        specificity = tn / (tn + fp) if (tn + fp) > 0 else 0.0
+
+        print(f"{class_name:<20} | {auc:.4f}   | {f1:.4f}   | {acc:.4f}   | {recall:.4f}   | {specificity:.4f}")
+        
+        metrics_list.append({
+            "Class": class_name, "AUC": auc, "F1": f1, "Acc": acc, "Sens": recall, "Spec": specificity
+        })
+
+    print("-" * 60)
     
-    # 6. Nodül Kontrolü
-    if 'Nodule' in classes:
-        nodule_idx = np.where(classes == 'Nodule')[0][0]
-        avg_nodule_prob = np.mean(all_preds[:, nodule_idx])
-        print(f"\n🕵️‍♂️ Nodül Analizi: Ort. Olasılık {avg_nodule_prob:.4f}")
+    # Ortalama Değerler
+    avg_auc = np.mean([m['AUC'] for m in metrics_list])
+    avg_f1 = np.mean([m['F1'] for m in metrics_list])
+    
+    print(f" ORTALAMA AUC: {avg_auc:.4f}")
+    print(f" ORTALAMA F1 : {avg_f1:.4f}")
+    print("="*60)
+
+    # İstersen sonuçları CSV olarak kaydet
+    pd.DataFrame(metrics_list).to_csv("evaluation_results.csv", index=False)
+    print("📁 Detaylı sonuçlar 'evaluation_results.csv' olarak kaydedildi.")
 
 if __name__ == "__main__":
     multiprocessing.freeze_support()
-    evaluate_model()
+    evaluate()
