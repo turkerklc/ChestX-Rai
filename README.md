@@ -43,6 +43,35 @@ Model, `HybridDenseNet121` sınıfı altında kurgulanmıştır:
 
 ## Kurulum
 
+### Veri Seti Hazırlığı
+
+Bu proje **NIH Chest X-Ray Dataset** kullanmaktadır. Dosya boyutu nedeniyle repoya dahil edilmemiştir.
+
+### 1. İndirme
+Veri setini ve etiket dosyasını aşağıdaki Kaggle linkinden indirin:
+🔗 **[NIH Chest X-rays Dataset (Kaggle)](https://www.kaggle.com/datasets/nih-chest-xrays/data)**
+
+Kaggle'dan indirdiğiniz dosyalarda resimler parça parça (örneğin `images_001`, `images_002`...) klasörler halinde olabilir.
+Tüm parça klasörlerin içindeki resimleri **tek bir klasörde** (`data/raw/images`) birleştirmelisiniz. Alt klasör bırakmayınız.
+
+Klasör yapısı **tam olarak** aşağıdaki gibi olmalıdır:
+
+```text
+Proje-Klasörü/
+├── data/
+│   └── raw/
+│       ├── images/              
+│       │   ├── 00000001_000.png
+│       │   ├── 00000002_000.png
+│       │   └── ... (Alt klasör olmamalı)
+│       └── Data_Entry_2017.csv  
+├── Backend/
+├── Frontend/
+└── ...
+```
+
+### Sanal Ortam
+
 Proje Python tabanlıdır ve bağımlılıkların çakışmaması için **Sanal Ortam (Virtual Environment)** kullanılması şiddetle önerilir.
 Projeyi klonladıktan sonra sanal ortam oluşturmak adına:
 
