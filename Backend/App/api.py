@@ -4,56 +4,38 @@ import torch
 import cv2
 import numpy as np
 import io
+import json
 from PIL import Image
 from pathlib import Path
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, UploadFile, HTTPException, Form
 from fastapi.responses import StreamingResponse, JSONResponse
 from torchvision import transforms
 
+#Grad-CAM kütüphanesi
 from pytorch_grad_cam import GradCAM
 from pytorch_grad_cam.utils.image import show_cam_on_image
 
+#Directory ayarları
 CURRENT_DIR = Path(__file__).resolve().parent
 sys.path.append(str(CURRENT_DIR))
 
+#HybridDenseNet'i import ediyoruz
 try: 
-      from model.model import XRayResNet50
+      from model.model import HybridDenseNet121
 except ImportError:
-      print("Model dosyası bulunamadı")
+      print("Model dosyası (model.py) bulunamadı")
       sys.exit(1)
 
 PROJECT_ROOT = CURRENT_DIR.parent.parent
-MODEL_PATH = PROJECT_ROOT / "saved_models" / "chest_xray_model.pth"
 
-# --- DÜZELTİLMİŞ ALFABETİK LİSTE ---
-LABELS = [
-    'Atelectasis',
-    'Cardiomegaly',
-    'Consolidation',
-    'Edema',
-    'Effusion',
-    'Emphysema',
-    'Fibrosis',
-    'Hernia',
-    'Infiltration',
-    'Mass',
-    'No Finding',       # <-- 10. Sıra (Doğru Yer)
-    'Nodule',
-    'Pleural_Thickening',
-    'Pneumonia',        # <-- 13. Sıra (Doğru Yer)
-    'Pneumothorax'
-]
-
-# Başlangıçta Listeyi Kontrol Et (Terminalde Yazar)
-print("--- LİSTE KONTROLÜ ---")
-print(f"10. Sıra (Beklenen: No Finding): {LABELS[10]}")
-print(f"13. Sıra (Beklenen: Pneumonia):  {LABELS[13]}")
-print("----------------------")
+#train.py'nin kaydettiği dosya ismi
+MODEL_PATH = PROJECT_ROOT / "saved_models" / "hybrid_densenet_best.pth"
+CLASS_NAMES_PATH = PROJECT_ROOT / "saved_models" / "class_names.json"
 
 app = FastAPI(
       title = "Chest X-Ray xAI ",
-      description="Sağlıkta Yapay Zeka: Hastalık tahmini ve Grad-CAM ile açıklanabilirlik.",
-      version="1.0"
+      description="DenseNet-121 ve metadata ile hastalık tespiti",
+      version="2.0"
 )
 app.add_middleware(
       CORSMiddleware,
@@ -65,24 +47,61 @@ app.add_middleware(
 
 model = None
 device = None
+LABELS = []
 
+#Grad-Cam kütüphanesi normalde yalnızca görüntü girişi alan modeller ile çalışır. Fakat bizim modelimiz çok girişli. 
+#Metadata'yı içeri hapsedeceğiz.
+
+class GradCAMModelWrapper(torch.nn.Module):
+     def __init__(self, model, metadata_tensor):
+          super().__init__()
+          self.model = model
+          self.metadata = metadata_tensor
+
+     def forward(self, x):
+          return self.model(x, self.metadata)
+     
 @app.on_event("startup")
 async def startup_event():
-      global model, device
+      
+      global model, device, LABELS
 
       #cihaz seçimi
-      device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
-      print(f" API başlatılıyor... Cihaz: {device}")
+      if torch.cuda.is_available():
+           device = torch.device("cuda")
+           print(f"Cihaz: NVDİA GPU ({torch.cuda.get_device_name(0)})")
+        
+      elif torch.backends.mps.is_available():
+           device = torch.device("mps")
+           print(f"Cihaz: Apple Silicon")
+      
+      else:
+           device = torch.device("cpu")
+           print("Cihaz: CPU")
 
       if not MODEL_PATH.exists():
             print(f"Model dosyası bulunamadı -> {MODEL_PATH}")
             return
       
-      #Modeli Yükle
-      print("Model hafızaya yükleniyor...")
-      model = XRayResNet50(num_classes=len(LABELS), pretrained=False)
+      
+      #Labelları yükle
+      if CLASS_NAMES_PATH.exists():
+           with open(CLASS_NAMES_PATH, "r") as f:
+                LABELS = json.load(f)
+           print(f"Etiketler yüklendi ({len(LABELS)} sınıf): {LABELS}")
+      else:
+           print("Hata: class_names.json bulunamadı!")
 
-      #Map_location
+      #Modeli Yükle
+      if not MODEL_PATH.exists():
+           print(f"Hata: Model dosyası yok -> {MODEL_PATH}")
+           return
+  
+      print("Hybrid DenseNet hafızaya yükleniyor...")
+      # num_classes, JSON'dan gelen liste uzunluğuna eşit olmalı
+      model = HybridDenseNet121(num_classes=len(LABELS), pretrained=False)
+
+      #Ağırlıkları yükle
       checkpoint = torch.load(MODEL_PATH, map_location=device, weights_only=True)
       model.load_state_dict(checkpoint)
       model = model.to(device)
@@ -90,90 +109,103 @@ async def startup_event():
 
       print("Model hazır ve istek bekliyor")
 
-def process_image(image_bytes):
-      try:
-         image = Image.open(io.BytesIO(image_bytes)).convert('RGB')
-         return image
-      except Exception:
-         raise HTTPException(status_code = 400, detail="Gönderilen dosya geçerli bir resim değil.")
-      
-@app.post("/predict")
-async def predict_endpoint(file: UploadFile = File(...)):
-    """
-    Röntgen görüntüsünü alır, hastalık olasılıklarını JSON olarak döner.
-    """
-    if model is None:
-        raise HTTPException(status_code=503, detail="Model henüz yüklenmedi.")
+def process_inputs(image_bytes, age: int, gender: str):
+     """
+        Görüntü ve metadata modele girebilecek hale geliyor.
+     """
 
-    image_bytes = await file.read()
-    image = process_image(image_bytes)
-    
-    # Resmi Hazırla (Eğitimdeki aynı transformlar)
-    transform = transforms.Compose([
+     #Görüntü kısmı
+
+     try:
+          image = Image.open(io.BytesIO(image_bytes)).convert('RGB')
+     except Exception:
+          raise HTTPException(status_code=400, detail="Geçersiz resim dosyası.")
+     
+     #Bu kısım train.py ile aynı
+     transform = transforms.Compose([
         transforms.Resize((512, 512)),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
-    
-    # --- İŞTE BU SATIR SİLİNMİŞTİ, GERİ EKLENDİ ---
-    input_tensor = transform(image).unsqueeze(0).to(device)
-    
-    # Tahmin
-    with torch.no_grad():
-        logits = model(input_tensor)
-        probs = torch.sigmoid(logits).squeeze().cpu().numpy()
-    
-    # --- SUÇÜSTÜ LOGLARI ---
-    max_index = probs.argmax()
-    max_score = probs[max_index]
-    current_label_at_index = LABELS[max_index]
-    
-  
+     
+     img_tensor = transform(image).unsqueeze(0).to(device)
 
-    # Sonuçları Sözlüğe Çevir
-    results = {label: float(prob) for label, prob in zip(LABELS, probs)}
-    
-    sorted_results = dict(sorted(results.items(), key=lambda x: x[1], reverse=True))
-    
-    return JSONResponse(content=sorted_results)
+     #Metadata kısmı
+     #Yaş normalizasyonu
+     norm_age = float(age) / 100.0
 
-# --- ENDPOINT 2: xAI / ISI HARİTASI (RESİM) ---
-@app.post("/explain")
-async def explain_endpoint(file: UploadFile = File(...)):
+     #Cinsiyet normalizasyonu
+     gender_numeric = 1.0 if gender.upper() == 'M' else 0.0
+
+     #Tensor oluşturma
+     meta_tensor = torch.tensor([[norm_age, gender_numeric]], dtype=torch.float32).to(device)
+    
+     return img_tensor, meta_tensor, image
+
+
+@app.post("/predict")
+async def predict_endpoint(file: UploadFile = File(...),
+                           age: int = Form(...),
+                           gender: str = Form(...)
+):
     """
-    Röntgeni alır, Grad-CAM ısı haritası uygulanmış halini RESİM (PNG) olarak döner.
+    Hybrid Model tahmini. İnput olarak görüntü, yaş ve cinsiyet alır.
     """
     if model is None:
         raise HTTPException(status_code=503, detail="Model henüz yüklenmedi.")
 
-    target_device = torch.device("cpu")
-    viz_model = XRayResNet50(num_classes=len(LABELS), pretrained=False).to(target_device)
-    viz_model.load_state_dict(model.state_dict())
-    viz_model.eval()
-
     image_bytes = await file.read()
     
-    nparr = np.frombuffer(image_bytes, np.uint8)
-    img_bgr = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-    img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+    #Ön işleme
+    img_tensor, meta_tensor, _ = process_inputs(image_bytes, age, gender)
+
+    #Tahmin 
+    with torch.no_grad():
+         logits = model(img_tensor, meta_tensor)
+         probs = torch.sigmoid(logits).squeeze().cpu().numpy()
     
-    img_float = np.float32(img_rgb) / 255
-    img_float = cv2.resize(img_float, (224, 224))
-    
-    transform = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ])
-    input_tensor = transform(Image.fromarray((img_float * 255).astype(np.uint8))).unsqueeze(0).to(target_device)
-    
-    target_layers = [viz_model.layer4[-1]]
-    cam = GradCAM(model=viz_model, target_layers=target_layers)
-    
-    grayscale_cam = cam(input_tensor=input_tensor, targets=None)
-    grayscale_cam = grayscale_cam[0, :]
-    
+    # Sonuçları Etiketlerle Eşleştir
+    results = {label: float(prob) for label, prob in zip(LABELS, probs)}
+    sorted_results = dict(sorted(results.items(), key=lambda x: x[1], reverse=True))
+
+    return JSONResponse(content=sorted_results)
+
+
+@app.post("/explain")
+async def explain_endpoint(file: UploadFile = File(...),
+                           age: int = Form(...),
+                           gender: str = Form(...)
+):
+    """
+        Grad-CAM Hybrid Model için ısı haritası üretir. 
+    """
+    if model is None:
+        raise HTTPException(status_code=503, detail="Model henüz yüklenmedi.")
+
+    image_bytes = await file.read()
+    #Ön işleme
+    img_tensor, meta_tensor, original_image = process_inputs(image_bytes, age, gender)
+
+    #Grad-CAM ayarları
+    # model.features bir Sequential bloktur. En sonuncusu genellikle 'norm5'tir.
+    target_layers = [model.features[-1]] # DenseNet için standart hedef
+
+    #Meta data için wrapper
+    wrapper_model = GradCAMModelWrapper(model, meta_tensor)
+    cam = GradCAM(model=wrapper_model, target_layers=target_layers)
+
+    # Haritayı Oluştur
+    grayscale_cam = cam(input_tensor=img_tensor, targets=None)
+    grayscale_cam = grayscale_cam[0, :] # [512, 512]
+
+    #OpenCV işlemleri
+    img_resized = original_image.resize((512, 512))
+    img_float = np.float32(img_resized) / 255.0
+
+    # Isı haritasını resmin üzerine bindir
     cam_image = show_cam_on_image(img_float, grayscale_cam, use_rgb=True)
-    
+
+    # PNG olarak kaydet ve gönder
     res, im_png = cv2.imencode(".png", cv2.cvtColor(cam_image, cv2.COLOR_RGB2BGR))
     
     return StreamingResponse(io.BytesIO(im_png.tobytes()), media_type="image/png")

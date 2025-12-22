@@ -2,213 +2,215 @@ import os
 import time
 import json
 import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import DataLoader, random_split
+from torchvision import transforms
 import pandas as pd
 import numpy as np
-from torch import nn, optim
-from torch.utils.data import Dataset, DataLoader
-from torchvision import transforms, models
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import MultiLabelBinarizer
-from PIL import Image
 from tqdm import tqdm
+import logging
+import multiprocessing
+import copy
 
-# --- AYARLAR (RTX 5090 İÇİN OPTİMİZE EDİLDİ) ---
+try:
+      from model.model import HybridDenseNet121
+      from model.dataset import NIHChestXrayDataset
+except ImportError:
+      import sys
+      sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+      from model.model import HybridDenseNet121
+      from model.dataset import NIHChestXrayDataset
+
 CONFIG = {
-    'IMG_SIZE': 512,        # ResNet standart girişi (Daha yüksek isterseniz 512 yapın ama 224 daha stabildir)
-    'BATCH_SIZE': 64,       # 5090'ın belleği yeter, artırılabilir (128 denenebilir)
-    'EPOCHS': 25,           # Eğitim süresi
-    'LEARNING_RATE': 1e-4,  # Hassas öğrenme
-    'DATA_CSV': 'Data_Entry_2017.csv',
-    'IMG_DIR': 'images',    # Resimlerin olduğu klasör
-    'MODEL_SAVE_PATH': 'chest_xray_model.pth',
-    'CLASS_NAMES_SAVE_PATH': 'class_names.json'
+      'IMG_DIR': '../../data/raw/images',
+      'CSV_FILE': '../../data/raw/Data_Entry_2017.csv',
+      'MODEL_SAVE_PATH': '../../saved_models',
+      'CLASS_NAMES_SAVE_PATH': '../../Backend/App/class_names.json',
+      'IMG_SIZE': 512,
+      'BATCH_SIZE': 32,
+      'EPOCHS': 20,
+      'LEARNING_RATE': 1e-4,
+      'NUM_WORKERS': 16,
+      'DEVICE': 'cuda' if torch.cuda.is_available() else 'cpu'
 }
 
-# --- CİHAZ SEÇİMİ ---
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(f"🚀 Cihaz: {device}")
-if torch.cuda.is_available():
-    print(f"🔥 Ekran Kartı: {torch.cuda.get_device_name(0)}")
+logging.basicConfig(level=logging.INFO, format= '%(asctime)s - %(message)s')
+logger = logging.getLogger()
 
-# --- 1. VERİ HAZIRLIĞI (DATA PROCESSING) ---
-def load_data():
-    print("📊 Veri seti okunuyor ve işleniyor...")
-    df = pd.read_csv(CONFIG['DATA_CSV'])
-    
-    # Gereksiz sütunları atalım, sadece Resim Adı, Hastalıklar ve Hasta ID kalsın
-    df = df[['Image Index', 'Finding Labels', 'Patient ID']]
-    
-    # Hastalıkları listeye çevir (Örn: "Infiltration|Pneumonia" -> ["Infiltration", "Pneumonia"])
-    df['Finding Labels'] = df['Finding Labels'].apply(lambda x: x.split('|'))
-    
-    return df
+def calculate_pos_weights(dataset, device):
+      """
+      Sınıf dengesizliğini (kimi hastalıkların miktarları arasında çok fark var)
+      çözmek için 'Weighted Cross Entropy' ağırlıklarını hesaplar.
+      
+      """
+      
+      logger.info("Sınıf ağırlıkları hesaplanıyor")
+      df = dataset.df
 
-# --- 2. HASTA BAZLI BÖLME (PATIENT-LEVEL SPLIT) ---
-def split_data(df):
-    print("✂️ Veri, hasta bazlı bölünüyor (Data Leakage Önlemi)...")
+      label_map = dataset.label_map 
+      # Sınıf sırasına göre sayım yap
+      sorted_labels = sorted(label_map.keys(), key=lambda k: label_map[k])
     
-    patient_ids = df['Patient ID'].unique()
-    train_ids, val_ids = train_test_split(patient_ids, test_size=0.2, random_state=42)
-    
-    train_df = df[df['Patient ID'].isin(train_ids)].reset_index(drop=True)
-    val_df = df[df['Patient ID'].isin(val_ids)].reset_index(drop=True)
-    
-    print(f"✅ Eğitim Seti: {len(train_df)} görüntü")
-    print(f"✅ Doğrulama Seti: {len(val_df)} görüntü")
-    
-    return train_df, val_df
+      pos_weights = []
+      total_samples = len(df)
 
-# --- 3. DATASET SINIFI ---
-class ChestXrayDataset(Dataset):
-    def __init__(self, df, img_dir, transform=None, mlb=None):
-        self.df = df
-        self.img_dir = img_dir
-        self.transform = transform
-        self.mlb = mlb
-        
-        # Etiketleri One-Hot Encode yap (0 ve 1'lere çevir)
-        self.labels = self.mlb.transform(self.df['Finding Labels'])
-        self.image_names = self.df['Image Index'].values
+      for label in sorted_labels:
+            
+            # Bu hastalık kaç kişide var? Hastalığın geçtiği satır sayısını veriyor yani
+            pos_count = df['Finding Labels'].apply(lambda x: label in x).sum() 
 
-    def __len__(self):
-        return len(self.df)
+            if pos_count == 0:   #sıfıra bölünme hatasını önlemek için
+                  pos_count = 1
 
-    def __getitem__(self, idx):
-        img_name = self.image_names[idx]
-        img_path = os.path.join(self.img_dir, img_name)
-        
-        try:
-            image = Image.open(img_path).convert("RGB")
-        except FileNotFoundError:
-            # Eğer resim bulunamazsa siyah bir resim döndür (kodu patlatma)
-            print(f"⚠️ Uyarı: {img_path} bulunamadı, atlanıyor.")
-            image = Image.new('RGB', (CONFIG['IMG_SIZE'], CONFIG['IMG_SIZE']))
+            weight = (total_samples - pos_count) / pos_count # ağırlık formülü (weigted cross entropy)
+            pos_weights.append(weight) 
+            
+      weights_tensor = torch.tensor(pos_weights, dtype=torch.float32).to(device)
+      logger.info(f"Hesaplanan Ağırlıklar (İlk 5): {weights_tensor[:5]}")
+      return weights_tensor
 
-        if self.transform:
-            image = self.transform(image)
-        
-        label = torch.tensor(self.labels[idx], dtype=torch.float32)
-        return image, label
-
-# --- 4. MODEL MİMARİSİ ---
-def build_model(num_classes):
-    print("🏗️ ResNet-50 modeli indiriliyor ve hazırlanıyor...")
-    # Weights parametresi yeni PyTorch sürümleri için güncellendi
-    model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
-    
-    # Son katmanı bizim hastalık sayımıza göre değiştir
-    num_ftrs = model.fc.in_features
-    model.fc = nn.Linear(num_ftrs, num_classes)
-    
-    return model.to(device)
-
-# --- 5. EĞİTİM DÖNGÜSÜ ---
 def train_model():
-    # 1. Veriyi Yükle
-    full_df = load_data()
-    
-    # 2. Etiketleyiciyi Hazırla (Binarizer)
-    mlb = MultiLabelBinarizer()
-    mlb.fit(full_df['Finding Labels'])
-    classes = mlb.classes_
-    print(f" Tespit Edilecek Sınıflar ({len(classes)}): {classes}")
-    
-    # Sınıf isimlerini kaydet (Frontend için kritik!)
-    with open(CONFIG['CLASS_NAMES_SAVE_PATH'], 'w') as f:
-        json.dump(list(classes), f)
-    print(f" Sınıf listesi kaydedildi: {CONFIG['CLASS_NAMES_SAVE_PATH']}")
+      
+      os.makedirs(CONFIG['MODEL_SAVE_PATH'], exist_ok=True) #eğer ilgili dosya yoksa oluştur ama bizde zaten var.
 
-    # 3. Veriyi Böl
-    train_df, val_df = split_data(full_df)
+      #data augmentation kısmı
+      # modeli eğitirken görüntü ile oynayarak modeli zorluyoruz. Çeviriyoruz döndürüyoruz falan. 
+      train_transform = transforms.Compose([
+            transforms.Resize((CONFIG['IMG_SIZE'], CONFIG['IMG_SIZE'])),
+            transforms.RandomHorizontalFlip(), #ayna efekti
+            transforms.RandomRotation(10),     #hafif döndürme
+            transforms.ToTensor(),             
+            transforms.Normalize([0.485,0.456, 0.406], [0.229, 0.224, 0.225]) #renkleri standartlaştırma için
+      ])
 
-    # 4. Dönüşümler (Augmentation)
-    train_transform = transforms.Compose([
-        transforms.Resize((CONFIG['IMG_SIZE'], CONFIG['IMG_SIZE'])),
-        transforms.RandomHorizontalFlip(), # Ayna efekti
-        transforms.RandomRotation(10),     # Hafif döndürme
-        transforms.ToTensor(),
-        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]) # ImageNet standartları
-    ])
+      # doğrulama yaparken, eğitimde olduğu gibi görüntü ile oynamıyoruz.
+      val_transform = transforms.Compose([
+            transforms.Resize((CONFIG['IMG_SIZE'], CONFIG['IMG_SIZE'])),
+            transforms.ToTensor(),
+            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+      ])
 
-    val_transform = transforms.Compose([
-        transforms.Resize((CONFIG['IMG_SIZE'], CONFIG['IMG_SIZE'])),
-        transforms.ToTensor(),
-        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-    ])
+      logger.info("Dataset hazırlanıyor...")
 
-    # 5. DataLoaderları Oluştur
-    train_dataset = ChestXrayDataset(train_df, CONFIG['IMG_DIR'], train_transform, mlb)
-    val_dataset = ChestXrayDataset(val_df, CONFIG['IMG_DIR'], val_transform, mlb)
+      full_dataset = NIHChestXrayDataset(
+            csv_file = CONFIG['CSV_FILE'],
+            root_dir = CONFIG['IMG_DIR'],
+            transform=None # Transform'u split sonrası vereceğiz
+      )
 
-    # num_workers=8 veya 16 yapabilir Eray (CPU çekirdeğine göre)
-    train_loader = DataLoader(train_dataset, batch_size=CONFIG['BATCH_SIZE'], shuffle=True, num_workers=16, pin_memory=True)
-    val_loader = DataLoader(val_dataset, batch_size=CONFIG['BATCH_SIZE'], shuffle=False, num_workers=16, pin_memory=True)
+      class_names = full_dataset.all_labels
+      #sınıf isimlerini kaydet
+      with open(CONFIG['CLASS_NAMES_SAVE_PATH'], 'w') as f:
+            json.dump(class_names, f)
+      
+      # Train/Val Split (%80 - %20)
+      train_size = int(0.8 * len(full_dataset))
+      val_size = len(full_dataset) - train_size
+      train_subset, val_subset = random_split(full_dataset, [train_size, val_size])
 
-    # 6. Modeli Kur
-    model = build_model(len(classes))
-    
-    # Multi-Label için Loss Fonksiyonu: BCEWithLogitsLoss
-    criterion = nn.BCEWithLogitsLoss()
-    optimizer = optim.Adam(model.parameters(), lr=CONFIG['LEARNING_RATE'])
-    
-    # Öğrenme hızını zamanla azalt (Scheduler)
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=3)
+      train_subset.dataset = copy.deepcopy(full_dataset)
+      val_subset.dataset = copy.deepcopy(full_dataset)
 
-    best_val_loss = float('inf')
+      train_subset.dataset.transform = train_transform
+      val_subset.dataset.transform = val_transform
 
-    print("\n🔥 EĞİTİM BAŞLIYOR... (Kahveni al, bu biraz sürebilir)\n")
-    
-    for epoch in range(CONFIG['EPOCHS']):
-        start_time = time.time()
-        
-        # --- TRAIN ---
-        model.train()
-        train_loss = 0.0
-        
-        loop = tqdm(train_loader, desc=f"Epoch {epoch+1}/{CONFIG['EPOCHS']} [Train]")
-        for images, labels in loop:
-            images, labels = images.to(device), labels.to(device)
+      #Data loader
+      train_loader = DataLoader(train_subset, batch_size=CONFIG['BATCH_SIZE'], 
+                            shuffle = True, num_workers=CONFIG['NUM_WORKERS'], pin_memory=True)
+      #shuffle = true, her epoch başında verileri karıştırır. Model sırayı ezberlemesin.
+      #pin_memory=True, veriyi RAM den VRAM'e atarken daha hızlı olur.
+      
+      val_loader = DataLoader(val_subset, batch_size=CONFIG['BATCH_SIZE']
+                              ,shuffle = False, num_workers=CONFIG['NUM_WORKERS'], pin_memory=True)
+      
+      logger.info(f"Eğitim seti: {len(train_subset)}, Doğrulama seti: {len(val_subset)}")
+
+      #model.py deki model sınıfı
+      model = HybridDenseNet121(num_classes=full_dataset.num_classes).to(CONFIG['DEVICE'])
+      
+      pos_weight = calculate_pos_weights(full_dataset, CONFIG['DEVICE'])
+      
+      #BCEWithLogitsLoss, çoklu etiket için en uygun hata ölçme yöntemi
+      criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+
+      optimizer = optim.Adam(model.parameters(), lr=CONFIG['LEARNING_RATE'])
+      
+      #ReduceLROnPlateau, Eğer loss düşmezse öğrenöe hızını (lr) yavaşlatır.
+      scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=2)
+
+      best_val_loss = float('inf')
+      logger.info("Training başlıyor...")
+
+      for epoch in range(CONFIG['EPOCHS']):
+            start_time = time.time()
+
+            model.train() # Eğitim kısmı
+            train_loss = 0.0
+
+            loop = tqdm(train_loader, desc=f"Epoch {epoch+1}/{CONFIG['EPOCHS']} [Train]")
+
+            for batch in loop:
+                  # Görsel ve metadata girişi
+                  # Verileri gpu'ya at
+                  images = batch['image'].to(CONFIG['DEVICE'])
+                  metadata = batch['metadata'].to(CONFIG['DEVICE'])
+
+                  labels = batch['labels'].to(CONFIG['DEVICE'])
+
+                  optimizer.zero_grad()
+
+                  #Model iki girdi ile çağrılacak
+
+                  outputs = model(images, metadata)
+                  
+                  loss = criterion(outputs, labels) #Hatayı ölç
+                  loss.backward() #Türev al
+                  optimizer.step() #Ağırlıkları güncelle
+                  
+                  train_loss += loss.item()
+                  loop.set_postfix(loss=loss.item())
+           
+            avg_train_loss = train_loss / len(train_loader)
+
+            #Validation
+            model.eval()  # Test modu
+            val_loss = 0.0
+
+            with torch.no_grad():
+                  for batch in val_loader:
+                        images = batch['image'].to(CONFIG['DEVICE'])
+                        metadata = batch['metadata'].to(CONFIG['DEVICE'])
+                        labels = batch['labels'].to(CONFIG['DEVICE']) 
+
+                        outputs = model(images, metadata)
+                        loss = criterion(outputs, labels)
+                        val_loss += loss.item()
             
-            optimizer.zero_grad()
-            outputs = model(images)
-            loss = criterion(outputs, labels)
-            
-            loss.backward()
-            optimizer.step()
-            
-            train_loss += loss.item() * images.size(0)
-            loop.set_postfix(loss=loss.item())
-            
-        train_loss = train_loss / len(train_loader.dataset)
+            avg_val_loss = val_loss / len(val_loader)
 
-        # --- VALIDATION ---
-        model.eval()
-        val_loss = 0.0
-        
-        with torch.no_grad():
-            for images, labels in val_loader:
-                images, labels = images.to(device), labels.to(device)
-                outputs = model(images)
-                loss = criterion(outputs, labels)
-                val_loss += loss.item() * images.size(0)
-        
-        val_loss = val_loss / len(val_loader.dataset)
-        
-        # Scheduler Adımı
-        scheduler.step(val_loss)
+            #log
 
-        # Süre ve Log
-        epoch_time = time.time() - start_time
-        print(f"Epoch {epoch+1} Bitti | Süre: {epoch_time:.0f}s | Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}")
+            scheduler.step(avg_val_loss)
+            duration = time.time() - start_time
 
-        # Checkpoint: Eğer model geliştiyse kaydet
-        if val_loss < best_val_loss:
-            print(f"⭐ Validation Loss düştü ({best_val_loss:.4f} -> {val_loss:.4f}). Model kaydediliyor...")
-            best_val_loss = val_loss
-            torch.save(model.state_dict(), CONFIG['MODEL_SAVE_PATH'])
+            logger.info(f"🏁 Epoch {epoch+1} | Süre: {duration:.0f}s | Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f}")
 
-    print("\n✅ EĞİTİM TAMAMLANDI!")
-    print(f"🏆 En iyi model şuraya kaydedildi: {CONFIG['MODEL_SAVE_PATH']}")
+            if avg_val_loss < best_val_loss:
+                logger.info(f"En iyi model kaydediliyor... ({best_val_loss:.4f} -> {avg_val_loss:.4f})")
+                best_val_loss = avg_val_loss
+                save_path = f"{CONFIG['MODEL_SAVE_PATH']}/hybrid_densenet_best.pth"
+                torch.save(model.state_dict(), save_path)
+      
+      logger.info("Training tamamlandı!")
 
-if __name__ == '__main__':
+if __name__ == "__main__":
+    multiprocessing.freeze_support()
+    
+    if CONFIG['DEVICE'] == 'cuda':
+      torch.backends.cudnn.benchmark = True
+      print(f"Cihaz: {torch.cuda.get_device_name(0)}")
+    else: 
+      print(f"Cihaz: {CONFIG['DEVICE']}")
+    
     train_model()
