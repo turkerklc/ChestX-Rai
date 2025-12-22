@@ -5,7 +5,7 @@ import torch.nn.functional as F
 
 class HybridDenseNet121(nn.Module):
       """
-      DenseNet'i ilgili stanford makalesi yüzünden ResNet'e tercih ettim. 
+      DenseNet'i ilgili Stanford makalesi yüzünden ResNet'e tercih ettim. 
       O makaleye ek olarak hasta meta datalarını (yaş ve cinsiyet) da modele ekledim
       """
 
@@ -22,7 +22,7 @@ class HybridDenseNet121(nn.Module):
 
             # yeni classifier katmanı
 
-            self.classifier = nn.SequentiaL(
+            self.classifier = nn.Sequential(
                   nn.Linear(self.num_image_features + self.num_meta_data, 512),
                   nn.ReLU(),
                   nn.Dropout(0.2),
