@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import axios from 'axios';
-import { FaCloudUploadAlt, FaHeartbeat, FaInfoCircle, FaArrowRight, FaMapMarked, FaExclamation, FaChevronUp, FaChevronDown, FaDownload, FaSpinner, FaCheckCircle, FaGithub } from 'react-icons/fa';
+import { FaCloudUploadAlt, FaHeartbeat, FaInfoCircle, FaArrowRight, FaMapMarked, FaExclamation, FaChevronUp, FaChevronDown, FaDownload, FaSpinner, FaCheckCircle, FaGithub, FaDatabase, FaBrain, FaLinkedin } from 'react-icons/fa';
 import logo from './assets/logo.jpeg';
 
 const DISEASE_DESCRIPTIONS = {
@@ -206,8 +206,10 @@ function App() {
           {/* LOGO */}
           <div className="flex items-center gap-3 cursor-pointer group" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
             <img src={logo} alt="ChestXRai Logo" className="h-10 w-auto group-hover:scale-105 transition-transform" />
-            <span className="font-bold text-2xl tracking-tight text-gray-800">
-              ChestX-R<span className="text-[rgb(70,65,180)]">ai</span>
+            <span className="font-bold text-2xl tracking-tight text-gray-800"
+            style={{ fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif' }}
+            >
+              ChestX-r<span className="text-[rgb(70,65,180)]">ai</span>
             </span>
           </div>
 
@@ -216,22 +218,12 @@ function App() {
             <button onClick={() => scrollToSection('details')} className="hover:text-[rgb(70,65,180)] transition-colors">Proje Hakkında</button>
             <button onClick={() => scrollToSection('about')} className="hover:text-[rgb(70,65,180)] transition-colors">Biz Kimiz</button>
 
-            {/* GITHUB LINKI */}
-            <a 
-              href="https://github.com/turkerklc/ChestX-Rai" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="text-gray-400 hover:text-gray-900 transition-colors text-xl"
-            >
-              <FaGithub />
-            </a>
-
             {/* ANALİZ BUTONU */}
             <button 
               onClick={() => scrollToSection('analyzer')}
-              className="px-6 py-2.5 bg-[rgb(70,65,180)] hover:bg-[#38339acc] text-white rounded-full shadow-lg shadow-indigo-200 hover:shadow-indigo-300 hover:-translate-y-0.5 transition-all duration-300 flex items-center gap-2"
+              className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-full transition-all duration-300 flex items-center gap-2"
             >
-              <span>Analiz Başlat</span>
+              <span>Analiz</span>
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path></svg>
             </button>
           </div>
@@ -243,7 +235,9 @@ function App() {
         {/* Kutu Genişliği */}
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-10">
-            <h1 className="text-4xl md:text-5xl font-extrabold text-gray-900 mb-4">
+            <h1 className="text-4xl md:text-5xl font-extrabold text-gray-900 mb-4"
+            style={{ fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif' }}
+            >
               Yapay Zeka Destekli <span className="text-red-600">Röntgen Analizi</span>
             </h1>
             <p className="text-lg text-gray-500 max-w-2xl mx-auto">
@@ -266,18 +260,18 @@ function App() {
                     <div className="bg-blue-100 p-3 rounded-full inline-block mb-3">
                       <FaCloudUploadAlt className="text-3xl text-blue-600" />
                     </div>
-                    <p className="text-gray-500 font-medium text-sm">Dosyayı buraya sürükleyin</p>
+                    <p className="text-gray-500 font-medium text-sm">Tıklayın ya da sürükleyin</p>
                   </div>
                 )}
               </div>
               <div className="grid grid-cols-2 gap-3 mt-4">
                 <div>
                   <label className="text-xs font-bold text-gray-500 uppercase">Yaş</label>
-                  <input type="number" value={age} onChange={handleAgeChange} min="0" max="150" className="w-full mt-1 p-2.5 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
+                  <input type="number" value={age} onChange={handleAgeChange} min="0" max="150" className="w-full mt-1 p-2.5 bg-white border border-gray-200 rounded-full focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
                 </div>
                 <div>
                   <label className="text-xs font-bold text-gray-500 uppercase">Cinsiyet</label>
-                  <select value={gender} onChange={(e) => setGender(e.target.value)} className="w-full mt-1 p-2.5 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm">
+                  <select value={gender} onChange={(e) => setGender(e.target.value)} className="w-full mt-1 p-2.5 bg-white border border-gray-200 rounded-full focus:ring-2 focus:ring-blue-500 outline-none text-sm">
                     <option value="M">Erkek</option>
                     <option value="F">Kadın</option>
                     <option value="Other">Diğer</option>
@@ -288,7 +282,7 @@ function App() {
                 <button
                   onClick={handleAnalyze}
                   disabled={loading || !selectedFile}
-                  className={`flex-1 py-3 rounded-xl font-bold text-white shadow-md transition-all transform active:scale-95 text-sm ${loading ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 hover:-translate-y-0.5'
+                  className={`flex-1 py-3 rounded-full font-bold text-white shadow-md transition-all transform active:scale-95 text-sm ${loading ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 '
                     }`}
                 >
                   {loading ? 'Analiz Ediliyor...' : 'Analizi Başlat'}
@@ -297,7 +291,7 @@ function App() {
                 {(selectedFile || predictions) && (
                   <button
                     onClick={handleReset}
-                    className="px-4 py-3 rounded-xl font-bold text-white bg-red-600 hover:bg-red-700 hover:-translate-y-0.5 transition-all active:scale-95 border border-gray-300 text-sm"
+                    className="px-4 py-3 rounded-full font-bold text-white bg-red-600 hover:bg-red-700 transition-all active:scale-95 border border-gray-300 text-sm"
                   >
                     Sıfırla
                   </button>
@@ -398,7 +392,7 @@ function App() {
 
                   {/* xAI GÖRSEL */}
                   <div className="flex flex-col h-full">
-                    <h3 className="text-base font-bold text-gray-800 mb-3">xAI Görsel Kanıt</h3>
+                    <h3 className="text-base font-bold text-gray-800 mb-3">Grad-CAM</h3>
 
                     {heatmapUrl ? (
                       <div className="flex flex-col gap-3">
@@ -439,16 +433,16 @@ function App() {
       <section id="details" className="py-24 bg-white border-t border-gray-100">
         <div className="max-w-7xl mx-auto px-4 text-center">
           <h2 className="text-3xl font-bold text-gray-900 mb-10">Proje Hakkında</h2>
+          
+          {/* Üst Sıra */}
           <div className="grid md:grid-cols-3 gap-10">
             <div className="p-6 bg-gray-50 rounded-xl">
               <FaInfoCircle className="text-4xl text-blue-600 mx-auto mb-4" />
-              <h3 className="font-bold">ResNet-50</h3>
+              <h3 className="font-bold">Geliştirilmiş DenseNet-121</h3>
               <p className="text-gray-600 text-sm leading-relaxed mt-2">
-                ResNet-50, derin öğrenme dünyasının en güvenilir mimarilerinden biridir.
-                Biz bu projede, bu mimariyi 112.000 adet göğüs röntgeni görüntüsüyle
-                eğiterek, zatürre ve diğer akciğer hastalıklarını %90'a varan doğrulukla
-                tespit edebilecek hale getirdik. Modelimiz, pikseller arasındaki en ince
-                detayları bile yakalayabilir.
+                DenseNet, katmanlar arası bilgi akışını maksimize ederek en ince detayları bile yakalayan güçlü bir mimaridir.
+                ChestX-rai'de standart DenseNet-121 mimarisini, hastanın yaş ve cinsiyet verilerini de işleyebilecek duruma getirdik. 
+                Bu hibrit yapı, sadece röntgen görüntüsüne değil, hastanın demografik risk faktörlerine de odaklanarak doğruluğu artırır.
               </p>
             </div>
             <div className="p-6 bg-gray-50 rounded-xl">
@@ -456,36 +450,113 @@ function App() {
               <h3 className="font-bold">Grad-CAM</h3>
               <p className="text-gray-600 text-sm leading-relaxed mt-2">
                 Grad-CAM, derin öğrenme modellerinin (özellikle de görüntü işleme modellerinin) nasıl karar verdiğini açıklamak için kullanılan tekniklerden biridir.
-                Yapay zekanın verdiği kararı, girdi olarak aldığı görselin hangi bölgesine bakarak verdiğini göstermek için bir ısı haritası oluşturur. Bu x-AI'nın (Explainable AI)
-                temel taşlarından biridir.
+                Yapay zekanın verdiği kararı, girdi olarak aldığı görselin hangi bölgesine bakarak verdiğini göstermek için bir ısı haritası oluşturur. 
               </p>
             </div>
             <div className="p-6 bg-gray-50 rounded-xl">
-              <FaExclamation className="text-4xl text-blue-600 mx-auto mb-4" />
-              <h3 className="font-bold">Uyarı</h3>
+              <FaDatabase className="text-4xl text-blue-600 mx-auto mb-4" />
+              <h3 className="font-bold">NIH Chest X-ray Veri Seti</h3>
               <p className="text-gray-600 text-sm leading-relaxed mt-2">
-                Bu proje yalnızca eğitim ve akademik araştırma amaçlı geliştirilmiştir.
+                ChestX-rai, Amerika Ulusal Sağlık Enstitüsü (NIH) tarafından sağlanan ve 30,805 farklı hasataya ait 112.120 adet anonim göğüs röntgeni görüntüsü ile eğitilmiştir. 
+                Bu veri seti, 14 farklı göğüs (toraks) hastalığı içerir. Veri setini daha detaylı olarak buradaki {" "}
+                <a 
+                    href="https://www.kaggle.com/datasets/nih-chest-xrays/data" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-blue-600 font-bold hover:underline"
+                  >
+                    Kaggle 
+                  </a>
+                
+                  {" "} sayfasından inceleyebilirsiniz.
+                
+                </p>
+            </div>
+          </div>
+          
+          {/* Alt Sıra */}
+
+          <div className="grid md:grid-cols-2 gap-10 mt-10 md:w-2/3 mx-auto" >
+           <div className="p-6 bg-gray-50 rounded-xl ">
+            <FaGithub className="text-4xl text-blue-600 mx-auto mb-4" />
+              <h3 className="font-bold">Projeye Erişin</h3>
+              <p className="text-gray-600 text-sm leading-relaxed mt-2">
+               ChestX-rai, tümüyle açık kaynak ve kar amacı gütmeyen bir projedir. 
+                  Modelin eğitim süreçlerini incelemek, mimariyi analiz etmek veya projeye kod katkısında bulunmak için {" "}
+                  <a 
+                    href="https://github.com/turkerklc/ChestX-Rai" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-blue-600 font-bold hover:underline"
+                  >
+                    GitHub
+                  </a>
+                  {" "} depomuzu ziyaret edebilirsiniz.
+                </p>
+             </div>
+
+           <div className="p-6 bg-gray-50 rounded-xl ">
+            <FaExclamation className="text-4xl text-blue-600 mx-auto mb-4" />
+            <h3 className="font-bold">Uyarı</h3>
+              <p className="text-gray-600 text-sm leading-relaxed mt-2">
+                ChestX-rai yalnızca eğitim ve akademik araştırma amaçlı geliştirilmiştir.
                 Sunulan sonuçlar kesinlik taşımaz ve profesyonel bir tıbbi teşhis veya doktor muayenesi yerine geçmez.
                 Elde edilen veriler tedavi amaçlı kullanılmamalıdır. Geliştiriciler, olası hatalı sonuçlardan veya bu sonuçlara dayanarak alınan kararlardan sorumlu tutulamaz.
                 Herhangi bir sağlık sorununuzda lütfen uzman bir hekime başvurunuz.
               </p>
-            </div>
+           </div>
+               
           </div>
+          
         </div>
       </section>
 
-      {/* HAKKIMIZDA */}
-      <section id="about" className="py-20 bg-gray-50">
+      {/* HAKKIMIZDA (LİNKEDIN BAĞLANTILI) */}
+      <section id="about" className="py-20 bg-gray-50 border-t border-gray-200">
         <div className="max-w-4xl mx-auto px-4 text-center">
-          <h2 className="text-3xl font-bold text-gray-800 mb-8">Biz Kimiz</h2>
-          <div className="flex justify-center gap-10">
-            <div className="bg-white p-6 rounded-xl shadow-lg w-64"><h3 className="font-bold text-lg">Türker Kılıç</h3><p className="text-blue-500">AI Engineer</p></div>
-            <div className="bg-white p-6 rounded-xl shadow-lg w-64"><h3 className="font-bold text-lg">Ferhat Köknar</h3><p className="text-blue-500">Frontend Developer</p></div>
+          <h2 className="text-3xl font-bold text-gray-800 mb-8" style={{ fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif' }}>
+            Biz Kimiz
+          </h2>
+          
+          <div className="flex flex-wrap justify-center gap-10">
+            
+            <a 
+              href="https://www.linkedin.com/in/turkerkilic/"
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="group"
+            >
+              <div className="bg-white p-8 rounded-xl transition-all duration-300 border border-gray-100 flex flex-col items-center">
+                <h3 className="font-bold text-xl text-gray-800 mb-1">Türker Kılıç</h3>
+                <p className="text-blue-600 font-medium text-sm mb-4">AI Engineer</p>
+                <div className="flex items-center gap-2 text-gray-400 text-xs group-hover:text-[#0077b5] transition-colors">
+                  <FaLinkedin className="text-lg" />
+                  <span>Profili Görüntüle</span>
+                </div>
+              </div>
+            </a>
+
+            <a 
+              href="https://www.linkedin.com/in/ferhat-köknar/" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="group"
+            >
+              <div className="bg-white p-8 rounded-xl transition-all duration-300 border border-gray-100 flex flex-col items-center">
+                <h3 className="font-bold text-xl text-gray-800 mb-1">Ferhat Köknar</h3>
+                <p className="text-purple-600 font-medium text-sm mb-4">Software Developer</p>
+                <div className="flex items-center gap-2 text-gray-400 text-xs group-hover:text-[#0077b5] transition-colors">
+                  <FaLinkedin className="text-lg" />
+                  <span>Profili Görüntüle</span>
+                </div>
+              </div>
+            </a>
+
           </div>
         </div>
       </section>
 
-      <footer className="bg-gray-900 text-white py-8 text-center"><p>&copy; 2025 ChestX-Rai</p></footer>
+      <footer className="bg-gray-900 text-white py-8 text-center"><p>&copy; 2025 ChestX-rai</p></footer>
     </div>
   );
 }
