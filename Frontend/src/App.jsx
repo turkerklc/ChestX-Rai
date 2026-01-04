@@ -105,7 +105,32 @@ function App() {
 
     } catch (error) {
       console.error("Hata:", error);
-      alert("API Hatası! Backend çalışıyor mu? (uvicorn api:app)");
+
+      if (error.response) {
+        
+        // 1. Durum: Backend'den gelen 400 Hatası (Bizim manuel fırlattıklarımız)
+        if (error.response.status === 400) {
+          const mesaj = error.response.data.detail || "Eksik bilgi girildi.";
+          alert(mesaj);
+        } 
+        
+        // 2. Durum: FastAPI'nin Otomatik Doğrulama Hatası (422)
+        // Yaş boş bırakıldığında veya harf girildiğinde burası çalışır.
+        else if (error.response.status === 422) {
+          alert("Lütfen YAŞ kısmını boş bırakmayınız ve sadece sayı giriniz.");
+        } 
+        
+        // 3. Durum: Diğer sunucu hataları (500 vb.)
+        else {
+          alert(`Sunucu Hatası! Kod: ${error.response.status}`);
+        }
+        // -----------------------------
+
+      } else if (error.request) {
+        alert("API Hatası! Backend çalışmıyor olabilir. (uvicorn api:app çalışıyor mu?)");
+      } else {
+        alert("Beklenmedik bir hata oluştu.");
+      }
     } finally {
       setLoading(false);
     }
@@ -248,7 +273,7 @@ function App() {
               <div className="grid grid-cols-2 gap-3 mt-4">
                 <div>
                   <label className="text-xs font-bold text-gray-500 uppercase">Yaş</label>
-                  <input type="number" value={age} onChange={handleAgeChange} min="0" max="150" className="w-full mt-1 p-2.5 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm" placeholder="45" />
+                  <input type="number" value={age} onChange={handleAgeChange} min="0" max="150" className="w-full mt-1 p-2.5 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
                 </div>
                 <div>
                   <label className="text-xs font-bold text-gray-500 uppercase">Cinsiyet</label>
