@@ -484,7 +484,7 @@ function App() {
                ChestX-rai, tümüyle açık kaynak ve kar amacı gütmeyen bir projedir. 
                   Modelin eğitim süreçlerini incelemek, mimariyi analiz etmek veya projeye kod katkısında bulunmak için {" "}
                   <a 
-                    href="https://github.com/turkerklc/ChestX-Rai" 
+                    href="https://github.com/turkerklc/ChestX-rai" 
                     target="_blank" 
                     rel="noopener noreferrer"
                     className="text-blue-600 font-bold hover:underline"
