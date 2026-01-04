@@ -151,9 +151,21 @@ async def predict_endpoint(file: UploadFile = File(...),
     """
     Hybrid Model tahmini. İnput olarak görüntü, yaş ve cinsiyet alır.
     """
+      
     if model is None:
         raise HTTPException(status_code=503, detail="Model henüz yüklenmedi.")
 
+    if age is None:
+         raise HTTPException(status_code= 400, detail= "Lütfen hastanın YAŞ bilgisini giriniz. Hibrit model bu veri olmadan çalışamaz.")
+    
+    if gender is None:
+         raise HTTPException(status_code= 400, detail = "Lütfen CİNSİYET bilgisini giriniz. Model bu bilgi olmadan çalışmaz")
+    
+    try: 
+        age_int = int(age)
+    except ValueError:
+         raise HTTPException(status_code=400, detail = "Geçersiz yaş formatı. Lütfen sayı giriniz")
+    
     image_bytes = await file.read()
     
     #Ön işleme

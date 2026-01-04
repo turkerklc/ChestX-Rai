@@ -1,4 +1,4 @@
-# ChestX-Rai:  NIH Chest X-Ray Hybrid Classification & XAI
+# ChestX-rai:  NIH Chest X-Ray Hybrid Classification & XAI
    
 Bu proje, NIH Chest X-Ray veri setini kullanarak 14 farklı göğüs hastalığını tespit eden **Hibrit bir Derin Öğrenme Modeli** geliştirmeyi amaçlar. Standart CNN yaklaşımlarından farklı olarak, görsel verileri hasta demografik bilgileriyle (Yaş ve Cinsiyet) birleştiren bir mimari kullanır ve Grad-CAM ile açıklanabilir yapay zeka (XAI) çıktıları sunar.
 
